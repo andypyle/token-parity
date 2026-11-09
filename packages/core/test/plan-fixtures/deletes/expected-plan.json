@@ -1,0 +1,6 @@
+{ "exitCode": 0,
+  "actions": [
+    { "id": "delete-code:color-gone:*", "op": "delete-code", "via": "suggested" },
+    { "id": "delete-figma:color-old:*", "op": "delete-figma", "via": "suggested" }
+  ],
+  "unresolved": [] }

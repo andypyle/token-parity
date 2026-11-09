@@ -1,0 +1,7 @@
+{ "exitCode": 1,
+  "actions": [
+    { "id": "update-figma:color-accent:default", "op": "update-figma", "via": "suggested" },
+    { "id": "update-figma:color-brand-primary:default", "op": "update-figma", "via": "suggested" },
+    { "id": "update-code:spacing-4:default", "op": "update-code", "via": "suggested" }
+  ],
+  "unresolved": [ { "finding": "value-mismatch:color-bg:default", "reason": "no-lock-difference" } ] }

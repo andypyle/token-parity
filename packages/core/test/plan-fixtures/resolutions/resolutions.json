@@ -1,0 +1,4 @@
+{ "version": 1,
+  "resolutions": { "color-brand-primary:default": "figma", "color-success:default": "skip" },
+  "names": { "radius-md": "Corner/Medium" },
+  "collections": { "radius-md": "Primitives" } }

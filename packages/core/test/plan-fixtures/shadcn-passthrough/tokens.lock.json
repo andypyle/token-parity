@@ -1,0 +1,4 @@
+{ "version": 1, "figmaColorProfile": "srgb", "tokens": {
+  "color-surface": { "type": "color", "modes": {
+    "light": { "oklch": "oklch(0.985 0 0)", "figmaRgb": { "r": 0.980256, "g": 0.980256, "b": 0.980256, "a": 1 } },
+    "dark": { "oklch": "oklch(0.55 0.22 300)", "figmaRgb": { "r": 0.534875, "g": 0.2618, "b": 0.860658, "a": 1 } } } } } }

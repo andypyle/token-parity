@@ -1,0 +1,7 @@
+{ "exitCode": 1, "actions": [],
+  "unresolved": [
+    { "finding": "broken-alias:color-accent:default:code", "reason": "broken-alias" },
+    { "finding": "broken-alias:color-link:default:figma", "reason": "broken-alias" },
+    { "finding": "broken-alias:color-loop-a:default:code", "reason": "broken-alias" },
+    { "finding": "broken-alias:color-loop-b:default:code", "reason": "broken-alias" }
+  ] }

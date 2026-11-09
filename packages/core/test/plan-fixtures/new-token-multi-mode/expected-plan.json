@@ -1,0 +1,6 @@
+{ "exitCode": 0,
+  "actions": [
+    { "id": "add-code:color-border:*", "op": "add-code", "via": "suggested" },
+    { "id": "add-figma:color-muted:*", "op": "add-figma", "via": "suggested" }
+  ],
+  "unresolved": [] }

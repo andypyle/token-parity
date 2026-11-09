@@ -1,0 +1,10 @@
+/* Brand theme */
+@theme {
+  --color-bg: oklch(0.985 0 0);
+  --color-fg:   oklch(0.21 0.006 285.9); /* body text */
+}
+
+.dark {
+  --color-bg: oklch(0.21 0.006 285.9);
+  --color-fg: oklch(0.985 0 0);
+}

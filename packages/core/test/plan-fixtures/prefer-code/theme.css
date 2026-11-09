@@ -1,0 +1,4 @@
+@theme {
+  --color-bg: oklch(0.21 0.006 285.9);
+  --color-brand-primary: oklch(0.6 0.2 30);
+}

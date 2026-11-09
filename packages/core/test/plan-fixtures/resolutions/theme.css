@@ -1,0 +1,5 @@
+@theme {
+  --color-brand-primary: oklch(0.6 0.2 30);
+  --color-success: oklch(0.62 0.19 259.8);
+  --radius-md: 0.5rem;
+}

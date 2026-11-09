@@ -43,10 +43,32 @@ export type TokenValue =
   | { kind: "boolean"; value: boolean; raw: string }
   | { kind: "alias"; ref: TokenKey; raw: string };
 
+/** Where one mode's value is declared in CSS. context: "theme" | "root" | "mode:<name>". */
+export interface CodeLocation {
+  cssVar: string;
+  context: string;
+  line: number;
+  selector: string;
+}
+
 export interface TokenSource {
   origin: "figma" | "code";
-  figma?: { variableId: string; name: string; collection: string };
-  code?: { cssVar: string; file: string; line: number; selector: string };
+  figma?: {
+    variableId: string;
+    name: string;
+    collection: string;
+    collectionId: string;
+    /** Normalized mode name -> Figma modeId. */
+    modeIds: Record<ModeName, string>;
+  };
+  code?: {
+    cssVar: string;
+    file: string;
+    line: number;
+    selector: string;
+    /** Per-mode declaration site (differs from cssVar for pass-through variables). */
+    modes: Record<ModeName, CodeLocation>;
+  };
 }
 
 export interface NormalizedToken {
@@ -64,9 +86,17 @@ export interface Diagnostic {
   token?: TokenKey;
 }
 
+export interface FigmaCollectionInfo {
+  id: string;
+  name: string;
+  /** Default mode first. `name` is normalized; single-mode collections use DEFAULT_MODE. */
+  modes: Array<{ modeId: string; name: ModeName }>;
+}
+
 export interface TokenSet {
   origin: "figma" | "code";
   colorProfile?: ColorProfile;
+  figmaCollections?: FigmaCollectionInfo[];
   modes: ModeName[];
   tokens: Map<TokenKey, NormalizedToken>;
   diagnostics: Diagnostic[];
@@ -82,6 +112,8 @@ export type LockModeEntry =
 export interface LockToken {
   type: TokenType;
   modes: Record<ModeName, LockModeEntry>;
+  /** Figma identity. Matching prefers variableId, so renamed variables stay matched. variableId is absent until commit for new variables. */
+  figma?: { variableId?: string; name: string };
 }
 
 export interface LockFile {
@@ -179,4 +211,104 @@ export interface Report {
   };
   findings: Finding[];
   diagnostics: Diagnostic[];
+}
+
+// ---------- Plan (Phase 2) ----------
+
+export interface Resolutions {
+  version: 1;
+  /** "token:mode" (or "token:*") -> which side wins. */
+  resolutions?: Record<string, "figma" | "code" | "skip">;
+  /** Figma names for new variables. */
+  names?: Record<TokenKey, string>;
+  /** Target collection (by name) for new variables. */
+  collections?: Record<TokenKey, string>;
+}
+
+export type FigmaValue =
+  | { type: "COLOR"; r: number; g: number; b: number; a: number }
+  | { type: "FLOAT"; value: number }
+  | { type: "STRING"; value: string }
+  | { type: "BOOLEAN"; value: boolean }
+  | { type: "ALIAS"; variableId: string }
+  | { type: "ALIAS"; name: string };
+
+export interface ActionBase {
+  id: string;
+  token: TokenKey;
+  mode: ModeName | null;
+  finding: string | null;
+  via: "suggested" | "prefer" | "resolution" | "near-match";
+  lock: LockModeEntry | null;
+}
+
+export type Action = ActionBase &
+  (
+    | { op: "update-code"; cssVar: string; context: string; from: string | null; to: string }
+    | { op: "add-code"; cssVar: string; values: Record<string, string> } // keyed by context
+    | { op: "delete-code"; cssVar: string; destructive: true }
+    | { op: "update-figma"; variableId: string; modeId: string; from: FigmaValue | null; to: FigmaValue }
+    | {
+        op: "add-figma";
+        name: string;
+        collectionId: string;
+        type: TokenType;
+        values: Record<string, FigmaValue>; // keyed by modeId
+        naming: { source: "explicit" | "inferred"; sibling?: string };
+      }
+    | { op: "delete-figma"; variableId: string; destructive: true }
+    | { op: "lock-only" }
+  );
+
+export type UnresolvedReason =
+  | "conflict"
+  | "no-lock-difference"
+  | "broken-alias"
+  | "type-mismatch"
+  | "no-target-collection"
+  | "needs-figma-name"
+  | "figma-mode-missing"
+  | "no-code-mode-selector"
+  | "depends-on-unresolved"
+  | "unsupported";
+
+export interface Unresolved {
+  finding: string;
+  token: TokenKey;
+  mode: ModeName | null;
+  reason: UnresolvedReason;
+  hint: string;
+}
+
+export interface Plan {
+  schemaVersion: 1;
+  tool: { name: "token-parity"; version: string };
+  inputs: {
+    figma: { path: string; sha256: string };
+    code: { path: string; sha256: string };
+    lock: { path: string; sha256: string | null };
+  };
+  settings: CompareSettings;
+  options: { prefer: "code" | "figma" | null; resolutions: string | null; figmaCollection: string | null };
+  actions: Action[];
+  unresolved: Unresolved[];
+  /** Finding ids the resolutions file marked "skip". */
+  skipped: string[];
+  /** The lock after every action lands. Deleted tokens keep their old entries here; apply removes them only when the delete runs. */
+  lockAfter: LockFile;
+}
+
+// ---------- Figma change set: the contract with the skill ----------
+
+export type FigmaOperation =
+  | { op: "create-variable"; name: string; collectionId: string; resolvedType: "COLOR" | "FLOAT" | "STRING" | "BOOLEAN" }
+  | ({ op: "set-value"; modeId: string; value: FigmaValue } & ({ variableId: string } | { variableName: string }))
+  | { op: "delete-variable"; variableId: string };
+
+export interface FigmaChangeSet {
+  version: 1;
+  colorProfile: ColorProfile;
+  basedOn: { figmaSha256: string };
+  /** Run in order: all creates, then all set-values, then deletes. */
+  operations: FigmaOperation[];
 }

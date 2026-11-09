@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "colorProfile": "srgb",
+  "operations": [
+    { "op": "create-variable", "name": "Corner/Medium", "collectionId": "VC:1", "resolvedType": "FLOAT" },
+    { "op": "set-value", "variableName": "Corner/Medium", "modeId": "1:0", "value": { "type": "FLOAT", "value": 8 } }
+  ]
+}
