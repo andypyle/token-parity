@@ -60,6 +60,8 @@ export interface TokenSource {
     collectionId: string;
     /** Normalized mode name -> Figma modeId. */
     modeIds: Record<ModeName, string>;
+    /** Variable scopes, when the export includes them. */
+    scopes?: string[];
   };
   code?: {
     cssVar: string;
@@ -255,6 +257,8 @@ export type Action = ActionBase &
         type: TokenType;
         values: Record<string, FigmaValue>; // keyed by modeId
         naming: { source: "explicit" | "inferred"; sibling?: string };
+        scopes: string[];
+        scopesFrom: "sibling" | "collection" | "namespace" | "none";
       }
     | { op: "delete-figma"; variableId: string; destructive: true }
     | { op: "lock-only" }
@@ -301,14 +305,15 @@ export interface Plan {
 // ---------- Figma change set: the contract with the skill ----------
 
 export type FigmaOperation =
-  | { op: "create-variable"; name: string; collectionId: string; resolvedType: "COLOR" | "FLOAT" | "STRING" | "BOOLEAN" }
+  | { op: "create-variable"; name: string; collectionId: string; resolvedType: "COLOR" | "FLOAT" | "STRING" | "BOOLEAN"; scopes: string[] }
   | ({ op: "set-value"; modeId: string; value: FigmaValue } & ({ variableId: string } | { variableName: string }))
   | { op: "delete-variable"; variableId: string };
 
 export interface FigmaChangeSet {
   version: 1;
   colorProfile: ColorProfile;
-  basedOn: { figmaSha256: string };
+  /** exportChecksum: checksum of the Figma export the plan was made from; the push script refuses if Figma differs. */
+  basedOn: { figmaSha256: string; exportChecksum: string };
   /** Run in order: all creates, then all set-values, then deletes. */
   operations: FigmaOperation[];
 }

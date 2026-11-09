@@ -346,6 +346,7 @@ function addFigma(ctx: Ctx, finding: Finding, c: NormalizedToken, via: Via) {
     modes[m.name] = target.lock;
   }
 
+  const scopes = pickScopes(ctx, c, collection, inferred?.sibling);
   push(
     ctx,
     {
@@ -355,12 +356,54 @@ function addFigma(ctx: Ctx, finding: Finding, c: NormalizedToken, via: Via) {
       type: c.type,
       values,
       naming: explicit ? { source: "explicit" } : { source: "inferred", sibling: inferred!.sibling },
+      scopes: scopes.scopes,
+      scopesFrom: scopes.from,
     },
     finding,
     via,
     null,
     { token: c.key, type: c.type, modes, figmaName: name },
   );
+}
+
+const NAMESPACE_SCOPES: Array<[RegExp, NormalizedToken["type"][], string[]]> = [
+  [/^color-/, ["color"], ["ALL_FILLS", "STROKE_COLOR", "EFFECT_COLOR"]],
+  [/^spacing-/, ["dimension", "number"], ["GAP", "WIDTH_HEIGHT"]],
+  [/^radius-/, ["dimension", "number"], ["CORNER_RADIUS"]],
+  [/^text-/, ["dimension", "number"], ["FONT_SIZE"]],
+  [/^font-/, ["string"], ["FONT_FAMILY"]],
+];
+
+/**
+ * Explicit scopes for a new variable (never ALL_SCOPES by default): the naming sibling's when it has the same
+ * type, else a Tailwind-namespace default, else the most common among same-type variables in the target
+ * collection, else none. ALL_SCOPES on existing variables is ignored as "never set".
+ */
+function pickScopes(ctx: Ctx, c: NormalizedToken, collection: FigmaCollectionInfo, siblingKey: string | undefined): { scopes: string[]; from: "sibling" | "collection" | "namespace" | "none" } {
+  const sameType = (t: NormalizedToken) => resolvedTypeOf(t.type) === resolvedTypeOf(c.type);
+  // ALL_SCOPES is Figma's default and usually means "never set", so it is no signal to copy.
+  const deliberate = (t: NormalizedToken | undefined) => {
+    const scopes = t?.source.figma?.scopes;
+    return scopes && !scopes.includes("ALL_SCOPES") ? scopes : undefined;
+  };
+  const sibling = siblingKey ? ctx.figma.tokens.get(siblingKey) : undefined;
+  const siblingScopes = sibling && sameType(sibling) ? deliberate(sibling) : undefined;
+  if (siblingScopes) return { scopes: [...siblingScopes], from: "sibling" };
+
+  // The Tailwind namespace says what the token is for, which beats "same type in the same collection".
+  const ns = NAMESPACE_SCOPES.find(([re, types]) => re.test(c.key) && types.includes(c.type));
+  if (ns) return { scopes: [...ns[2]], from: "namespace" };
+
+  const counts = new Map<string, number>();
+  for (const t of ctx.figma.tokens.values()) {
+    const scopes = deliberate(t);
+    if (t.source.figma?.collectionId !== collection.id || !sameType(t) || !scopes) continue;
+    const k = JSON.stringify([...scopes].sort());
+    counts.set(k, (counts.get(k) ?? 0) + 1);
+  }
+  const common = [...counts.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))[0];
+  if (common) return { scopes: JSON.parse(common[0]) as string[], from: "collection" };
+  return { scopes: [], from: "none" };
 }
 
 /** Explicit > the naming sibling's collection > --figma-collection > the only compatible collection. */

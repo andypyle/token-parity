@@ -32,6 +32,7 @@ interface FigmaVariable {
   resolvedType: "COLOR" | "FLOAT" | "STRING" | "BOOLEAN";
   variableCollectionId: string;
   valuesByMode: Record<string, unknown>;
+  scopes?: string[];
 }
 
 const TYPE_MAP: Record<FigmaVariable["resolvedType"], TokenType> = {
@@ -142,7 +143,15 @@ export function readFigmaExport(input: unknown, file: string, keyByVariableId: R
       type,
       modes,
       values,
-      source: { origin: "figma", figma: { variableId: v.id, name: v.name, collection: collection.name, collectionId: collection.id, modeIds } },
+      source: { origin: "figma", figma: {
+          variableId: v.id,
+          name: v.name,
+          collection: collection.name,
+          collectionId: collection.id,
+          modeIds,
+          ...(Array.isArray(v.scopes) ? { scopes: v.scopes } : {}),
+        },
+      },
     });
   }
 

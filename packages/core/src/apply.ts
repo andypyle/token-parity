@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { editCss } from "./css-edit.js";
+import { jsonChecksum } from "./figma-script.js";
 import { InputError } from "./errors.js";
 import { defaultChangesPath, pendingPath, sha256, toJson, type Pending } from "./state.js";
 import type { Action, FigmaChangeSet, FigmaOperation, Plan } from "./types.js";
@@ -62,7 +63,7 @@ export async function applyPlan(plan: Plan, options: ApplyOptions): Promise<Appl
   const figmaChanges: FigmaChangeSet = {
     version: 1,
     colorProfile: plan.lockAfter.figmaColorProfile,
-    basedOn: { figmaSha256: figma.sha256 },
+    basedOn: { figmaSha256: figma.sha256, exportChecksum: jsonChecksum(figmaText) },
     operations: figmaOperations(run),
   };
 
@@ -107,7 +108,7 @@ function figmaOperations(actions: Action[]): FigmaOperation[] {
   const deletes: FigmaOperation[] = [];
   for (const a of actions) {
     if (a.op === "add-figma") {
-      creates.push({ op: "create-variable", name: a.name, collectionId: a.collectionId, resolvedType: resolvedTypeOf(a.type) });
+      creates.push({ op: "create-variable", name: a.name, collectionId: a.collectionId, resolvedType: resolvedTypeOf(a.type), scopes: a.scopes });
       for (const [modeId, value] of Object.entries(a.values)) sets.push({ op: "set-value", variableName: a.name, modeId, value });
     } else if (a.op === "update-figma") {
       updates.push({ op: "set-value", variableId: a.variableId, modeId: a.modeId, value: a.to });
