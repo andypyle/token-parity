@@ -33,7 +33,7 @@ Figma bridge (used by the Claude Code skill with the Figma MCP's use_figma tool)
   token-parity verify-export --figma <file> --checksum <c>
                                                  confirm a saved export matches what Figma returned
 
-Every command reads defaults from ./${"$"}{CONFIG_FILE} (or --config <file>): figma, code, lock,
+Every command reads defaults from ./${CONFIG_FILE} (or --config <file>): figma, code, lock,
 resolutions, figmaCollection, modes, nearThreshold, rgbTolerance, precision, remBase.
 Paths in it are relative to the config file. Flags override it.
 

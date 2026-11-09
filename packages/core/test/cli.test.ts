@@ -207,3 +207,11 @@ describe("cli: use_figma size limit", () => {
     expect(r.stderr).toMatch(/over use_figma's 50000 limit \(400 operations\).*skip/);
   });
 });
+
+describe("cli: help", () => {
+  it("names the config file", async () => {
+    const help = (await cli("--help")).stdout;
+    expect(help).toContain("./token-parity.config.json");
+    expect(help).not.toContain("${");
+  });
+});
