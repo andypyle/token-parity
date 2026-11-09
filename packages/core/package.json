@@ -1,0 +1,37 @@
+{
+  "name": "token-parity",
+  "version": "0.0.0",
+  "description": "Check and sync design tokens between Figma variables and code.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "token-parity": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "culori": "^4.0.2"
+  },
+  "devDependencies": {
+    "@types/culori": "^4.0.1",
+    "@types/node": "^26.6.6",
+    "tsdown": "^0.23.7",
+    "typescript": "^7.0.2",
+    "unrun": "^0.3.1",
+    "vitest": "^5.1.0"
+  }
+}

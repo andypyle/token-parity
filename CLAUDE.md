@@ -1,0 +1,23 @@
+# token-parity
+
+Checks whether design tokens in Figma match tokens in code, and syncs drift in either direction.
+
+## Layout
+- packages/core: the engine and CLI (npm package). Never talks to Figma directly; reads and writes files only.
+- skills/token-parity: the Claude Code skill. Bridges the engine and the Figma MCP.
+- docs/kickoff-prompt.md: the original Phase 1 brief.
+
+## Commands
+- pnpm test, pnpm build, pnpm typecheck (from the repo root)
+
+## Decisions (do not change without asking)
+- ESM only. Built with tsdown. Tested with Vitest. TypeScript strict.
+- Test-first: write fixtures in packages/core/test/fixtures before logic.
+- Pipeline: adapters -> normalize (DTCG-style) -> three-way compare (Figma, code, lock) -> report.
+  check / plan / apply are separate commands. CI only runs check.
+- Colors: OKLCH in code is canonical. Figma stores RGB. Compare colors in OKLCH, never as strings.
+- Lock file stores the original OKLCH and the RGB last written to Figma. If Figma's RGB still
+  matches the locked RGB, keep the locked OKLCH; never re-derive it.
+- Out-of-gamut colors are warnings, not drift.
+- Conflicts (both sides changed) are reported, never auto-resolved.
+- The agent never edits token values by hand. All changes come from the engine.
