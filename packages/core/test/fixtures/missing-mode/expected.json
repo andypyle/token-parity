@@ -1,0 +1,6 @@
+{
+  "exitCode": 1,
+  "findings": [
+    { "id": "missing-mode:color-bg:contrast", "kind": "missing-mode", "token": "color-bg", "mode": "contrast", "severity": "error", "suggestedDirection": "figma-to-code" }
+  ]
+}

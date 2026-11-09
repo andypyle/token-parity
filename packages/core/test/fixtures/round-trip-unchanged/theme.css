@@ -1,0 +1,14 @@
+/* Figma holds 8-bit-quantized RGB for every color. Re-deriving OKLCH from it
+   would give a near-match; using the locked OKLCH gives zero findings. */
+@import "tailwindcss";
+
+@theme {
+  --color-blue-500: oklch(0.62 0.19 259.8);
+  --spacing-4: 1rem;
+  --color-bg: oklch(0.985 0 0);
+  --color-accent: var(--color-blue-500);
+}
+
+.dark {
+  --color-bg: oklch(0.21 0.006 285.9);
+}

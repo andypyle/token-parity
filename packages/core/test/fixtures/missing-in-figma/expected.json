@@ -1,0 +1,7 @@
+{
+  "exitCode": 1,
+  "findings": [
+    { "id": "missing-in-figma:color-brand-secondary:*", "kind": "missing-in-figma", "token": "color-brand-secondary", "mode": null, "severity": "error", "suggestedDirection": "code-to-figma" },
+    { "id": "missing-in-figma:radius-md:*", "kind": "missing-in-figma", "token": "radius-md", "mode": null, "severity": "error", "suggestedDirection": "code-to-figma" }
+  ]
+}

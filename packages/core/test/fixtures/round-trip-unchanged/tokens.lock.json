@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "figmaColorProfile": "srgb",
+  "tokens": {
+    "color-blue-500": { "type": "color", "modes": {
+      "default": { "oklch": "oklch(0.62 0.19 259.8)", "figmaRgb": { "r": 0.223529, "g": 0.505882, "b": 0.964706, "a": 1 } } } },
+    "spacing-4": { "type": "dimension", "modes": { "default": { "value": "1rem" } } },
+    "color-bg": { "type": "color", "modes": {
+      "light": { "oklch": "oklch(0.985 0 0)", "figmaRgb": { "r": 0.980392, "g": 0.980392, "b": 0.980392, "a": 1 } },
+      "dark": { "oklch": "oklch(0.21 0.006 285.9)", "figmaRgb": { "r": 0.094118, "g": 0.094118, "b": 0.105882, "a": 1 } } } },
+    "color-accent": { "type": "color", "modes": {
+      "light": { "alias": "color-blue-500" },
+      "dark": { "alias": "color-blue-500" } } }
+  }
+}

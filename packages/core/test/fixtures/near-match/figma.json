@@ -1,0 +1,12 @@
+{
+  "colorProfile": "srgb",
+  "variableCollections": {
+    "VC:1": { "id": "VC:1", "name": "Primitives", "modes": [{ "modeId": "1:0", "name": "Value" }], "defaultModeId": "1:0" }
+  },
+  "variables": {
+    "V:1": { "id": "V:1", "name": "color/blue/500", "resolvedType": "COLOR", "variableCollectionId": "VC:1",
+             "valuesByMode": { "1:0": { "r": 0.2235294117647059, "g": 0.5058823529411764, "b": 0.9647058823529412, "a": 1 } } },
+    "V:2": { "id": "V:2", "name": "spacing/4", "resolvedType": "FLOAT", "variableCollectionId": "VC:1",
+             "valuesByMode": { "1:0": 16 } }
+  }
+}

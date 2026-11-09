@@ -1,0 +1,6 @@
+/* No lock. Figma holds #3981f6, the hex-quantized form of the code color
+   (ΔE_OK ≈ 0.0005). That is a rounding difference, not drift. */
+@theme {
+  --color-blue-500: oklch(0.62 0.19 259.8);
+  --spacing-4: 1rem;
+}

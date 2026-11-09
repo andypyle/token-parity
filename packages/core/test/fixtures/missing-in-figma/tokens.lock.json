@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "figmaColorProfile": "srgb",
+  "tokens": {
+    "color-brand-primary": { "type": "color", "modes": { "default": { "oklch": "oklch(0.62 0.19 259.8)", "figmaRgb": { "r": 0.223529, "g": 0.505882, "b": 0.964706, "a": 1 } } } }
+  }
+}

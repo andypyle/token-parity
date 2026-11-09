@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "figmaColorProfile": "display-p3",
+  "tokens": {
+    "color-green-vivid": { "type": "color", "modes": {
+      "default": { "oklch": "oklch(0.7 0.35 145)", "figmaRgb": { "r": 0, "g": 0.78047, "b": 0, "a": 1 } } } },
+    "color-blue-500": { "type": "color", "modes": {
+      "default": { "oklch": "oklch(0.62 0.19 259.8)", "figmaRgb": { "r": 0.298242, "g": 0.498827, "b": 0.933858, "a": 1 } } } }
+  }
+}

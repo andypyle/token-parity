@@ -24,7 +24,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "culori": "^4.0.2"
+    "culori": "^4.0.2",
+    "postcss": "^8.5.32"
   },
   "devDependencies": {
     "@types/culori": "^4.0.1",

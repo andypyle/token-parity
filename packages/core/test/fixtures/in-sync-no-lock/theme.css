@@ -1,0 +1,37 @@
+/* No lock. Exact RGB conversions with no drift, using each supported way of
+   writing a dark mode:
+   - .dark override of a theme variable              (color-bg)
+   - @variant dark block                              (color-fg)
+   - pass-through: @theme var(--x) with :root/.dark   (color-surface, shadcn style)
+   - [data-theme="dark"] selector                     (color-surface's dark value) */
+@import "tailwindcss";
+
+@theme {
+  --color-blue-500: oklch(0.62 0.19 259.8);
+  --radius-md: 0.5rem;
+  --color-bg: oklch(0.985 0 0);
+  --color-fg: oklch(0.21 0.006 285.9);
+  --color-accent: var(--color-blue-500);
+}
+
+@theme inline {
+  --color-surface: var(--surface);
+}
+
+:root {
+  --surface: oklch(0.985 0 0);
+}
+
+[data-theme="dark"] {
+  --surface: oklch(0.55 0.22 300);
+}
+
+.dark {
+  --color-bg: oklch(0.21 0.006 285.9);
+}
+
+@variant dark {
+  :root {
+    --color-fg: oklch(0.985 0 0);
+  }
+}

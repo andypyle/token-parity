@@ -1,0 +1,6 @@
+/* color-brand-primary: was blue. Figma changed it to purple and code to red: conflict.
+   color-success: was green. Both sides changed it to the same red: convergent, in sync. */
+@theme {
+  --color-brand-primary: oklch(0.6 0.2 30);
+  --color-success: oklch(0.6 0.2 30);
+}

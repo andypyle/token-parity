@@ -1,0 +1,9 @@
+{
+  "exitCode": 1,
+  "findings": [
+    { "id": "broken-alias:color-accent:default:code", "kind": "broken-alias", "token": "color-accent", "mode": "default", "severity": "error", "suggestedDirection": "needs-decision" },
+    { "id": "broken-alias:color-link:default:figma", "kind": "broken-alias", "token": "color-link", "mode": "default", "severity": "error", "suggestedDirection": "needs-decision" },
+    { "id": "broken-alias:color-loop-a:default:code", "kind": "broken-alias", "token": "color-loop-a", "mode": "default", "severity": "error", "suggestedDirection": "needs-decision" },
+    { "id": "broken-alias:color-loop-b:default:code", "kind": "broken-alias", "token": "color-loop-b", "mode": "default", "severity": "error", "suggestedDirection": "needs-decision" }
+  ]
+}

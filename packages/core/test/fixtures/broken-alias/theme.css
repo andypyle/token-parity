@@ -1,0 +1,10 @@
+/* color-accent:   code alias points at a token that does not exist
+   color-link:     Figma alias points at a variable missing from the export
+   color-loop-a/b: code aliases form a cycle */
+@theme {
+  --color-brand-primary: oklch(0.62 0.19 259.8);
+  --color-accent: var(--color-nope);
+  --color-link: var(--color-brand-primary);
+  --color-loop-a: var(--color-loop-b);
+  --color-loop-b: var(--color-loop-a);
+}

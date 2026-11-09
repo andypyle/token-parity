@@ -1,0 +1,6 @@
+/* color-brand-secondary and radius-md exist only in code and were never synced -> code-to-figma */
+@theme {
+  --color-brand-primary: oklch(0.62 0.19 259.8);
+  --color-brand-secondary: oklch(0.55 0.22 300);
+  --radius-md: 0.5rem;
+}

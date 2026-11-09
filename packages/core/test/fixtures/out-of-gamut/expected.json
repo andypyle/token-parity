@@ -1,0 +1,6 @@
+{
+  "exitCode": 0,
+  "findings": [
+    { "id": "out-of-gamut:color-green-vivid:default", "kind": "out-of-gamut", "token": "color-green-vivid", "mode": "default", "severity": "warning", "suggestedDirection": "none" }
+  ]
+}

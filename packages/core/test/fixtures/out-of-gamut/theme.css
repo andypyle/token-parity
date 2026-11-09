@@ -1,0 +1,6 @@
+/* oklch(0.7 0.35 145) is outside Display P3. Figma holds the gamut-mapped
+   value recorded in the lock. That is a warning, not drift. */
+@theme {
+  --color-green-vivid: oklch(0.7 0.35 145);
+  --color-blue-500: oklch(0.62 0.19 259.8);
+}

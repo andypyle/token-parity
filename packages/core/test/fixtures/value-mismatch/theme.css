@@ -1,0 +1,10 @@
+/* color-brand-primary: only code changed (blue -> purple)        -> code-to-figma
+   spacing-4:           only Figma changed (16 -> 20)              -> figma-to-code
+   color-bg:            not in the lock, sides differ              -> needs-decision
+   color-accent:        code replaced the alias with a literal     -> code-to-figma */
+@theme {
+  --color-brand-primary: oklch(0.55 0.22 300);
+  --spacing-4: 1rem;
+  --color-bg: oklch(0.21 0.006 285.9);
+  --color-accent: oklch(0.62 0.19 259.8);
+}

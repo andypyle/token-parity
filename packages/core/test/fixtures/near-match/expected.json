@@ -1,0 +1,6 @@
+{
+  "exitCode": 0,
+  "findings": [
+    { "id": "near-match:color-blue-500:default", "kind": "near-match", "token": "color-blue-500", "mode": "default", "severity": "info", "suggestedDirection": "none" }
+  ]
+}
