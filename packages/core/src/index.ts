@@ -14,3 +14,5 @@ export { applyPlan, StalePlanError, type ApplyOptions, type ApplyResult } from "
 export { commitPending, type CommitResult } from "./commit.js";
 export { renderPlanMarkdown } from "./report/plan-markdown.js";
 export { inferFigmaName } from "./naming.js";
+export { exportScript, pushScript, jsonChecksum } from "./figma-script.js";
+export { loadConfig, CONFIG_FILE, type Config } from "./config.js";

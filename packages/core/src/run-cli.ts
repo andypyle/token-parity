@@ -6,13 +6,15 @@ import { parseArgs, type ParseArgsConfig } from "node:util";
 import { applyPlan, StalePlanError } from "./apply.js";
 import { check, exitCodeFor, parseJson } from "./check.js";
 import { commitPending } from "./commit.js";
+import { CONFIG_FILE, loadConfig, settingsFromConfig, type Config } from "./config.js";
+import { exportScript, jsonChecksum, pushScript } from "./figma-script.js";
 import { InputError } from "./errors.js";
 import { plan, planExitCode } from "./plan.js";
 import { renderJson } from "./report/json.js";
 import { renderMarkdown } from "./report/markdown.js";
 import { renderPlanMarkdown } from "./report/plan-markdown.js";
-import { defaultPlanPath, toJson } from "./state.js";
-import type { CompareSettings, Plan } from "./types.js";
+import { defaultChangesPath, defaultPlanPath, toJson } from "./state.js";
+import type { CompareSettings, FigmaChangeSet, Plan } from "./types.js";
 import { VERSION } from "./version.js";
 
 export const USAGE = `token-parity ${VERSION}
@@ -23,6 +25,16 @@ Usage:
                       [--resolutions <file>] [--figma-collection <name>] [--out <file>]
   token-parity apply  (--plan <file> | --lock <file>) [--allow-deletes] [--changes-out <file>]
   token-parity commit --figma <fresh export> (--plan <file> | --lock <file>)
+
+Figma bridge (used by the Claude Code skill with the Figma MCP's use_figma tool):
+  token-parity figma-script export               print use_figma code that exports variables
+  token-parity figma-script push [--changes <f>] print use_figma code that applies a change set
+  token-parity verify-export --figma <file> --checksum <c>
+                                                 confirm a saved export matches what Figma returned
+
+Every command reads defaults from ./${"$"}{CONFIG_FILE} (or --config <file>): figma, code, lock,
+resolutions, figmaCollection, modes, nearThreshold, rgbTolerance, precision, remBase.
+Paths in it are relative to the config file. Flags override it.
 
 check options:
   --format <md|json>       report format (default: md)
@@ -49,6 +61,7 @@ Exit codes:
   plan    0 every finding has an action, 1 decisions remain
   apply   0 applied
   commit  0 lock written, 1 some changes are not in Figma yet (pending lock kept)
+  verify-export  0 matches, 1 the file differs from what Figma returned
   all     2 usage or input error, or a stale plan
 `;
 
@@ -79,6 +92,8 @@ const OPTIONS = {
   },
   apply: { plan: { type: "string" }, lock: { type: "string" }, "allow-deletes": { type: "boolean" }, "changes-out": { type: "string" } },
   commit: { figma: { type: "string" }, plan: { type: "string" }, lock: { type: "string" } },
+  "figma-script": { changes: { type: "string" }, lock: { type: "string" } },
+  "verify-export": { figma: { type: "string" }, checksum: { type: "string" } },
 } as const satisfies Record<string, ParseArgsConfig["options"]>;
 
 type Command = keyof typeof OPTIONS;
@@ -102,8 +117,15 @@ export async function runCli(argv: string[], io: CliIO): Promise<number> {
   }
 
   let values: Values;
+  let positionals: string[] = [];
   try {
-    values = parseArgs({ args: rest, options: { ...OPTIONS[command as Command], help: { type: "boolean", short: "h" } }, strict: true }).values as Values;
+    const parsed = parseArgs({
+      args: rest,
+      options: { ...OPTIONS[command as Command], config: { type: "string" }, help: { type: "boolean", short: "h" } },
+      allowPositionals: command === "figma-script",
+      strict: true,
+    }) as unknown as { values: Values; positionals: string[] };
+    ({ values, positionals } = parsed);
   } catch (err) {
     io.stderr(`${(err as Error).message}\n\n${USAGE}`);
     return 2;
@@ -114,15 +136,21 @@ export async function runCli(argv: string[], io: CliIO): Promise<number> {
   }
 
   try {
+    const config = loadConfig(str(values, "config"));
+    const v = withConfig(values, config);
     switch (command as Command) {
       case "check":
-        return await runCheck(values, io);
+        return await runCheck(v, config, io);
       case "plan":
-        return await runPlan(values, io);
+        return await runPlan(v, config, io);
       case "apply":
-        return await runApply(values, io);
+        return await runApply(v, io);
       case "commit":
-        return await runCommit(values, io);
+        return await runCommit(v, io);
+      case "figma-script":
+        return await runFigmaScript(v, positionals, io);
+      case "verify-export":
+        return await runVerifyExport(v, io);
     }
   } catch (err) {
     if (err instanceof UsageError || err instanceof InputError || err instanceof StalePlanError) {
@@ -133,6 +161,16 @@ export async function runCli(argv: string[], io: CliIO): Promise<number> {
   }
 }
 
+/** Config values become defaults for flags that weren't given. */
+function withConfig(values: Values, config: Config): Values {
+  const v = { ...values };
+  for (const key of ["figma", "code", "lock", "resolutions"] as const) {
+    if (v[key] === undefined && config[key] !== undefined) v[key] = config[key];
+  }
+  if (v["figma-collection"] === undefined && config.figmaCollection) v["figma-collection"] = config.figmaCollection;
+  return v;
+}
+
 const str = (v: Values, k: string) => (typeof v[k] === "string" ? (v[k] as string) : undefined);
 function required(v: Values, ...keys: string[]): string[] {
   const missing = keys.filter((k) => !str(v, k));
@@ -140,16 +178,16 @@ function required(v: Values, ...keys: string[]): string[] {
   return keys.map((k) => str(v, k)!);
 }
 
-async function runCheck(v: Values, io: CliIO): Promise<number> {
+async function runCheck(v: Values, config: Config, io: CliIO): Promise<number> {
   const [figmaPath, codePath] = required(v, "figma", "code");
   const format = str(v, "format");
   if (format !== "md" && format !== "json") throw new UsageError(`--format must be md or json, got ${format}`);
-  const report = await check({ figmaPath: figmaPath!, codePath: codePath!, lockPath: str(v, "lock") ?? null, settings: settingsFrom(v) });
+  const report = await check({ figmaPath: figmaPath!, codePath: codePath!, lockPath: str(v, "lock") ?? null, settings: { ...settingsFromConfig(config), ...settingsFrom(v) } });
   await emit(format === "json" ? renderJson(report) : renderMarkdown(report), str(v, "out"), io);
   return exitCodeFor(report);
 }
 
-async function runPlan(v: Values, io: CliIO): Promise<number> {
+async function runPlan(v: Values, config: Config, io: CliIO): Promise<number> {
   const [figmaPath, codePath, lockPath] = required(v, "figma", "code", "lock");
   const prefer = str(v, "prefer") ?? null;
   if (prefer !== null && prefer !== "code" && prefer !== "figma") throw new UsageError(`--prefer must be code or figma, got ${prefer}`);
@@ -158,9 +196,10 @@ async function runPlan(v: Values, io: CliIO): Promise<number> {
     codePath: codePath!,
     lockPath: lockPath!,
     prefer,
-    resolutionsPath: str(v, "resolutions") ?? null,
+    // A configured resolutions file is optional until the user has made a decision.
+    resolutionsPath: str(v, "resolutions") && (v.resolutions !== config.resolutions || existsSync(str(v, "resolutions")!)) ? str(v, "resolutions")! : null,
     figmaCollection: str(v, "figma-collection") ?? null,
-    settings: settingsFrom(v),
+    settings: { ...settingsFromConfig(config), ...settingsFrom(v) },
   });
   const out = str(v, "out") ?? defaultPlanPath(lockPath!);
   await mkdir(dirname(out), { recursive: true });
@@ -207,6 +246,44 @@ async function runCommit(v: Values, io: CliIO): Promise<number> {
     return 1;
   }
   io.stdout(`Committed. Wrote ${result.lockPath}.\n`);
+  return 0;
+}
+
+async function runFigmaScript(v: Values, positionals: string[], io: CliIO): Promise<number> {
+  const [kind] = positionals;
+  if (kind === "export") {
+    io.stdout(exportScript());
+    return 0;
+  }
+  if (kind !== "push") throw new UsageError("figma-script needs `export` or `push`");
+  const path = str(v, "changes") ?? (str(v, "lock") ? defaultChangesPath(str(v, "lock")!) : undefined);
+  if (!path) throw new UsageError("pass --changes <file> or --lock <file>");
+  if (!existsSync(path)) throw new InputError("no change set; run apply first", path);
+  const changes = parseJson(await readFile(path, "utf8"), path) as FigmaChangeSet;
+  if (changes?.version !== 1 || !Array.isArray(changes.operations) || !changes.basedOn?.exportChecksum) {
+    throw new InputError("not a token-parity change set (or made before export checksums); re-run plan and apply", path);
+  }
+  io.stdout(pushScript(changes));
+  return 0;
+}
+
+async function runVerifyExport(v: Values, io: CliIO): Promise<number> {
+  const [figmaPath, expected] = required(v, "figma", "checksum");
+  const text = await readFile(figmaPath!, "utf8").catch(() => {
+    throw new InputError("cannot read file", figmaPath);
+  });
+  let actual: string;
+  try {
+    actual = jsonChecksum(text);
+  } catch {
+    io.stdout(`MISMATCH: ${figmaPath} is not valid JSON. Write the export's \`json\` string to the file again, exactly as returned.\n`);
+    return 1;
+  }
+  if (actual !== expected) {
+    io.stdout(`MISMATCH: ${figmaPath} has checksum ${actual}, Figma returned ${expected}. Write the export's \`json\` string to the file again, exactly as returned.\n`);
+    return 1;
+  }
+  io.stdout(`OK: ${figmaPath} matches the Figma export (${expected}).\n`);
   return 0;
 }
 
