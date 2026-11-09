@@ -261,6 +261,36 @@ dependency or a private registry), not a local path.
 - One push can carry about 300 changes, because of the Figma MCP's code size limit. Bigger syncs go in
   batches: skip part of the plan and sync the rest afterwards.
 
+## Roadmap
+
+### Codebases without Tailwind
+
+Tailwind v4 is the only code format so far, but the engine was built to take others. Each format is an
+adapter that reads tokens into one shared format, so comparing, planning and the lock work the same for
+all of them. Candidates:
+
+- plain CSS custom properties (`:root { --brand: … }`)
+- Sass / SCSS variables
+- W3C design tokens (DTCG) JSON, such as Style Dictionary input
+- JavaScript / TypeScript theme objects
+
+Each format needs a reader (enough for `check`) and a writer, so `apply` can edit the files in place
+while keeping their formatting.
+
+### Figma as the only source of truth
+
+In many teams the designers own the design system, and code should follow Figma, never the other way
+round. A one-way mode (for example `"source": "figma"` in the config) would work like this:
+
+- Every difference is resolved toward code. Changes made in code are reported as drift to undo, and
+  never pushed to Figma.
+- A token added in code but not in Figma is flagged for removal, or for a designer to add in Figma.
+- CI fails when someone edits a token in code instead of in Figma, and says so.
+- The skill only ever reads from Figma, so it never needs edit access to the design file.
+
+The direction would be a setting you choose up front, not a guess. A token changed on both sides would
+still be shown to you, just with Figma's value as the planned fix.
+
 ## Development
 
 ```
