@@ -176,7 +176,7 @@ function compareToken(ctx: Ctx, f: NormalizedToken, c: NormalizedToken, lock: Lo
 // ---------------------------------------------------------------------------------------------
 // Mode pairing
 
-interface Pair {
+export interface Pair {
   mode: ModeName; // label used in findings and lock lookups
   figmaMode: ModeName;
   codeMode: ModeName;
@@ -189,7 +189,7 @@ interface Pair {
  * - single vs multi: the single value is compared against every mode of the other side.
  * - multi vs multi: code's default (@theme) mode is Figma's default (first) mode; other modes match by name.
  */
-function pairModes(f: NormalizedToken, c: NormalizedToken): Pair[] {
+export function pairModes(f: NormalizedToken, c: NormalizedToken): Pair[] {
   const fSingle = f.modes.length === 1 && f.modes[0] === DEFAULT_MODE;
   const cSingle = c.modes.length === 1 && c.modes[0] === DEFAULT_MODE;
   if (fSingle && cSingle) {
@@ -385,7 +385,7 @@ function compareGeneric(ctx: Ctx, fv: TokenValue, cv: TokenValue, lockEntry: Loc
 }
 
 /** Does this side's value still equal what the lock recorded for it? */
-function lockMatches(ctx: Ctx, side: "figma" | "code", value: TokenValue, entry: LockModeEntry): boolean {
+export function lockMatches(ctx: Pick<Ctx, "lockRgbUsable" | "settings">, side: "figma" | "code", value: TokenValue, entry: LockModeEntry): boolean {
   if (value.kind === "alias") return "alias" in entry && entry.alias === value.ref;
   if (value.kind === "color") {
     if (!("oklch" in entry)) return false;
@@ -437,7 +437,7 @@ function gamutCheck(
 // ---------------------------------------------------------------------------------------------
 // Helpers
 
-function typesCompatible(a: TokenType, b: TokenType): boolean {
+export function typesCompatible(a: TokenType, b: TokenType): boolean {
   const numeric = (t: TokenType) => t === "number" || t === "dimension";
   return a === b || (numeric(a) && numeric(b));
 }

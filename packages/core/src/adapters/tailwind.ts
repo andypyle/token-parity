@@ -10,15 +10,22 @@ import postcss, { type AtRule, type ChildNode, type Container, type Declaration,
 import { resolveAlias } from "../alias.js";
 import { parseCssColor } from "../color.js";
 import { InputError } from "../errors.js";
-import { DEFAULT_MODE, type Diagnostic, type ModeName, type NormalizedToken, type TokenSet, type TokenType, type TokenValue } from "../types.js";
+import { DEFAULT_MODE, type CodeLocation, type Diagnostic, type ModeName, type NormalizedToken, type TokenSet, type TokenType, type TokenValue } from "../types.js";
 
 interface Decl {
   raw: string;
   line: number;
   selector: string;
+  cssVar: string;
+  context: string;
 }
 
-type Context = { kind: "theme" } | { kind: "root" } | { kind: "mode"; mode: ModeName } | { kind: "other" };
+export type Context = { kind: "theme" } | { kind: "root" } | { kind: "mode"; mode: ModeName } | { kind: "other" };
+
+/** Serialized context used in CodeLocation and plan actions. */
+export function contextKey(ctx: Context): string {
+  return ctx.kind === "mode" ? `mode:${ctx.mode}` : ctx.kind;
+}
 
 const ROOT_SELECTORS = new Set([":root", ":host", "html"]);
 const VAR_RE = /^var\(\s*(--[A-Za-z0-9_\-.\\]+)\s*(?:,[^)]*)?\)$/;
@@ -26,6 +33,8 @@ const DIMENSION_RE = /^(-?\d*\.?\d+)(px|rem|em|%)$/;
 const NUMBER_RE = /^-?\d*\.?\d+$/;
 
 const normalizeSelector = (s: string) => s.replace(/\s+/g, " ").replace(/["']/g, "").trim();
+
+export { normalizeSelector };
 
 export function readTailwindCss(css: string, file: string, modeMap: Record<ModeName, string[]>): TokenSet {
   let root;
@@ -35,17 +44,20 @@ export function readTailwindCss(css: string, file: string, modeMap: Record<ModeN
     throw new InputError(`could not parse CSS: ${(err as Error).message}`, file);
   }
 
-  const selectorToMode = new Map<string, ModeName>();
-  for (const [mode, selectors] of Object.entries(modeMap)) {
-    for (const s of selectors) selectorToMode.set(normalizeSelector(s), mode);
-  }
+  const selectorToMode = buildSelectorToMode(modeMap);
 
   const theme = new Map<string, Decl>(); // name -> @theme declaration
   const scoped = new Map<string, Map<ModeName, Decl>>(); // name -> mode -> declaration (root = DEFAULT_MODE)
 
   root.walkDecls(/^--/, (decl) => {
     const ctx = contextOf(decl, selectorToMode);
-    const entry: Decl = { raw: decl.value.trim(), line: decl.source?.start?.line ?? 0, selector: selectorLabel(decl) };
+    const entry: Decl = {
+      raw: decl.value.trim(),
+      line: decl.source?.start?.line ?? 0,
+      selector: selectorLabel(decl),
+      cssVar: decl.prop,
+      context: contextKey(ctx),
+    };
     if (ctx.kind === "theme") theme.set(decl.prop, entry);
     else if (ctx.kind === "root" || ctx.kind === "mode") {
       const mode = ctx.kind === "root" ? DEFAULT_MODE : ctx.mode;
@@ -73,8 +85,11 @@ export function readTailwindCss(css: string, file: string, modeMap: Record<ModeN
 
     const modes = modeOrder.filter((m) => perMode.has(m));
     const values: Record<ModeName, TokenValue> = {};
+    const locations: Record<ModeName, CodeLocation> = {};
     for (const mode of modes) {
-      values[mode] = parseValue(perMode.get(mode)!.raw, key, diagnostics);
+      const d = perMode.get(mode)!;
+      values[mode] = parseValue(d.raw, key, diagnostics);
+      locations[mode] = { cssVar: d.cssVar, context: d.context, line: d.line, selector: d.selector };
       allModes.add(mode);
     }
     tokens.set(key, {
@@ -82,7 +97,7 @@ export function readTailwindCss(css: string, file: string, modeMap: Record<ModeN
       type: "string", // provisional; set below once aliases can be resolved
       modes,
       values,
-      source: { origin: "code", code: { cssVar: name, file, line: decl.line, selector: decl.selector } },
+      source: { origin: "code", code: { cssVar: name, file, line: decl.line, selector: decl.selector, modes: locations } },
     });
   }
 
@@ -91,7 +106,15 @@ export function readTailwindCss(css: string, file: string, modeMap: Record<ModeN
   return set;
 }
 
-function contextOf(decl: Declaration, selectorToMode: Map<string, ModeName>): Context {
+export function buildSelectorToMode(modeMap: Record<ModeName, string[]>): Map<string, ModeName> {
+  const selectorToMode = new Map<string, ModeName>();
+  for (const [mode, selectors] of Object.entries(modeMap)) {
+    for (const s of selectors) selectorToMode.set(normalizeSelector(s), mode);
+  }
+  return selectorToMode;
+}
+
+export function contextOf(decl: Declaration, selectorToMode: Map<string, ModeName>): Context {
   let inTheme = false;
   let inRoot = false;
   for (let node: Container | undefined = decl.parent as Container | undefined; node && node.type !== "root"; node = node.parent as Container | undefined) {

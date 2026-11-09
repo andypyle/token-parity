@@ -8,6 +8,7 @@ import {
   DEFAULT_MODE,
   type ColorProfile,
   type Diagnostic,
+  type FigmaCollectionInfo,
   type ModeName,
   type NormalizedToken,
   type TokenSet,
@@ -60,7 +61,11 @@ export const figmaModeName = segment;
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
-export function readFigmaExport(input: unknown, file: string): TokenSet {
+/**
+ * @param keyByVariableId Keys recorded in the lock, by Figma variable id. These take precedence over the
+ *   default name rule, so variables with custom names (or renamed in Figma) stay matched to their token.
+ */
+export function readFigmaExport(input: unknown, file: string, keyByVariableId: ReadonlyMap<string, string> = new Map()): TokenSet {
   if (!isObject(input)) throw new InputError("expected a JSON object", file);
   const { variableCollections, variables, colorProfile } = input;
   if (!isObject(variableCollections)) throw new InputError("`variableCollections` must be an object keyed by id", file);
@@ -90,13 +95,23 @@ export function readFigmaExport(input: unknown, file: string): TokenSet {
     }
     return raw as unknown as FigmaVariable;
   });
-  const byId = new Map(vars.map((v) => [v.id, { key: figmaNameToKey(v.name), name: v.name }]));
+  const keyOf = (v: FigmaVariable) => keyByVariableId.get(v.id) ?? figmaNameToKey(v.name);
+  const byId = new Map(vars.map((v) => [v.id, { key: keyOf(v), name: v.name }]));
+
+  const figmaCollections: FigmaCollectionInfo[] = [...collections.values()].map((c) => {
+    const ordered = orderModes(c);
+    return {
+      id: c.id,
+      name: c.name,
+      modes: ordered.map((m) => ({ modeId: m.modeId, name: ordered.length === 1 ? DEFAULT_MODE : figmaModeName(m.name) })),
+    };
+  });
 
   const tokens = new Map<string, NormalizedToken>();
   const allModes = new Set<ModeName>();
 
   for (const v of vars) {
-    const key = figmaNameToKey(v.name);
+    const key = keyOf(v);
     const collection = collections.get(v.variableCollectionId);
     if (!collection) throw new InputError(`variable ${v.name} references unknown collection ${v.variableCollectionId}`, file);
     if (tokens.has(key)) {
@@ -105,11 +120,12 @@ export function readFigmaExport(input: unknown, file: string): TokenSet {
     }
 
     // Default mode first, then the rest in collection order. Single-mode collections use DEFAULT_MODE.
-    const ordered = [...collection.modes].sort((a, b) => Number(b.modeId === collection.defaultModeId) - Number(a.modeId === collection.defaultModeId));
+    const ordered = orderModes(collection);
     const single = ordered.length === 1;
     const type = TYPE_MAP[v.resolvedType];
     const values: Record<ModeName, TokenValue> = {};
     const modes: ModeName[] = [];
+    const modeIds: Record<ModeName, string> = {};
 
     for (const mode of ordered) {
       const name = single ? DEFAULT_MODE : figmaModeName(mode.name);
@@ -117,6 +133,7 @@ export function readFigmaExport(input: unknown, file: string): TokenSet {
       if (raw === undefined) continue;
       values[name] = toValue(raw, type, profile, byId, `${v.name} (${mode.name})`, file);
       modes.push(name);
+      modeIds[name] = mode.modeId;
       allModes.add(name);
     }
 
@@ -125,11 +142,15 @@ export function readFigmaExport(input: unknown, file: string): TokenSet {
       type,
       modes,
       values,
-      source: { origin: "figma", figma: { variableId: v.id, name: v.name, collection: collection.name } },
+      source: { origin: "figma", figma: { variableId: v.id, name: v.name, collection: collection.name, collectionId: collection.id, modeIds } },
     });
   }
 
-  return { origin: "figma", colorProfile: profile, modes: [...allModes], tokens, diagnostics };
+  return { origin: "figma", colorProfile: profile, figmaCollections, modes: [...allModes], tokens, diagnostics };
+}
+
+function orderModes(c: FigmaCollection): FigmaMode[] {
+  return [...c.modes].sort((a, b) => Number(b.modeId === c.defaultModeId) - Number(a.modeId === c.defaultModeId));
 }
 
 function toValue(raw: unknown, type: TokenType, profile: ColorProfile, byId: Map<string, { key: string; name: string }>, where: string, file: string): TokenValue {

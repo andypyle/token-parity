@@ -71,7 +71,7 @@ describe("figma adapter", () => {
   });
 
   it("records the source location", () => {
-    expect(set.tokens.get("spacing-4")!.source.figma).toEqual({ variableId: "V:2", name: "spacing/4", collection: "Primitives" });
+    expect(set.tokens.get("spacing-4")!.source.figma).toEqual({ variableId: "V:2", name: "spacing/4", collection: "Primitives", collectionId: "VC:1", modeIds: { default: "1:0" } });
   });
 
   it("warns when the color profile is missing and defaults to sRGB", () => {

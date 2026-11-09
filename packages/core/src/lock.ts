@@ -20,6 +20,12 @@ export function parseLock(input: unknown, file: string): LockFile {
     if (!isObject(token) || !TYPES.includes(token.type as TokenType) || !isObject(token.modes)) {
       throw new InputError(`token ${key} is malformed`, file);
     }
+    if (token.figma !== undefined) {
+      const f = token.figma;
+      if (!isObject(f) || typeof f.name !== "string" || (f.variableId !== undefined && typeof f.variableId !== "string")) {
+        throw new InputError(`token ${key}: \`figma\` must be { name, variableId? }`, file);
+      }
+    }
     for (const [mode, entry] of Object.entries(token.modes)) {
       const where = `${key} (${mode})`;
       if (!isLockEntry(entry)) throw new InputError(`${where}: expected {oklch, figmaRgb}, {value} or {alias}`, file);
