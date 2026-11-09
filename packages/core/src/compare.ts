@@ -132,9 +132,11 @@ function missingOnOneSide(ctx: Ctx, kind: "missing-in-code" | "missing-in-figma"
     lock: lock?.modes[mode0] ?? null,
     changed: side === "figma" ? { figma: changedHere, code: lock ? true : null } : { figma: lock ? true : null, code: changedHere },
     suggestedDirection: direction,
-    message: lock
-      ? `Exists in ${where} but was removed from ${other} since the last sync.`
-      : `Exists in ${where} but not in ${other}.`,
+    message:
+      (lock ? `Exists in ${where} but was removed from ${other} since the last sync.` : `Exists in ${where} but not in ${other}.`) +
+      (side === "figma" && !lock && !token.source.figma?.codeSyntax
+        ? " If code has it under another name, set codeSyntax.WEB on the Figma variable to link them."
+        : ""),
   });
 
   if (side === "code") {

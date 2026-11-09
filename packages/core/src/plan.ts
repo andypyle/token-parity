@@ -8,6 +8,7 @@ import { readFile } from "node:fs/promises";
 import { loadInputs, parseJson } from "./check.js";
 import { compare, lockMatches, pairModes, type Pair } from "./compare.js";
 import { InputError } from "./errors.js";
+import { detectCodeSyntaxStyle, formatCodeSyntax } from "./code-syntax.js";
 import { inferFigmaName } from "./naming.js";
 import {
   DEFAULT_MODE,
@@ -310,6 +311,8 @@ function toFigma(ctx: Ctx, cv: NormalizedToken["values"][string], type: Normaliz
 }
 
 function addCode(ctx: Ctx, finding: Finding, f: NormalizedToken, via: Via) {
+  // The designer named its CSS token in codeSyntax, but no such token resolved: don't invent a name.
+  if (f.source.figma?.codeSyntaxUnmatched) return unresolve(ctx, finding, "code-syntax-unmatched", f.source.figma.codeSyntax);
   const single = f.modes.length === 1 && f.modes[0] === DEFAULT_MODE;
   const values: Record<string, string> = {};
   const modes: Record<ModeName, LockModeEntry> = {};
@@ -359,6 +362,7 @@ function addFigma(ctx: Ctx, finding: Finding, c: NormalizedToken, via: Via) {
       naming: explicit ? { source: "explicit" } : { source: "inferred", sibling: inferred!.sibling },
       scopes: scopes.scopes,
       scopesFrom: scopes.from,
+      codeSyntax: formatCodeSyntax(c.key, detectCodeSyntaxStyle(codeSyntaxValues(ctx.figma))),
     },
     finding,
     via,
@@ -405,6 +409,10 @@ function pickScopes(ctx: Ctx, c: NormalizedToken, collection: FigmaCollectionInf
   const common = [...counts.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))[0];
   if (common) return { scopes: JSON.parse(common[0]) as string[], from: "collection" };
   return { scopes: [], from: "none" };
+}
+
+function codeSyntaxValues(figma: TokenSet): string[] {
+  return [...figma.tokens.values()].flatMap((t) => (t.source.figma?.codeSyntax ? [t.source.figma.codeSyntax] : []));
 }
 
 /** Explicit > the naming sibling's collection > --figma-collection > the only compatible collection. */
@@ -472,6 +480,8 @@ function hint(finding: Finding, reason: UnresolvedReason, detail?: string): stri
       return `The Figma collection has no "${finding.mode}" mode. Add the mode in Figma, or resolve ${rk} to "figma".`;
     case "no-code-mode-selector":
       return `No CSS selector is configured for this mode${suffix || ` "${finding.mode}"`}. Pass --mode <name>=<selector>.`;
+    case "code-syntax-unmatched":
+      return `Its codeSyntax.WEB (${detail}) matches no token in code, so the CSS name is unknown. Set it in Figma to the CSS variable you want, e.g. var(--color-accent), then re-plan.`;
     case "depends-on-unresolved":
       return `Aliases a token that this plan cannot create yet${suffix}. Resolve that token first.`;
     default:

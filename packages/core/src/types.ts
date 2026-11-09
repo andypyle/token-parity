@@ -62,6 +62,10 @@ export interface TokenSource {
     modeIds: Record<ModeName, string>;
     /** Variable scopes, when the export includes them. */
     scopes?: string[];
+    /** codeSyntax.WEB, when set. */
+    codeSyntax?: string;
+    /** codeSyntax.WEB is set but matched no token in code; the key fell back to the name rule. */
+    codeSyntaxUnmatched?: boolean;
   };
   code?: {
     cssVar: string;
@@ -260,6 +264,8 @@ export type Action = ActionBase &
         naming: { source: "explicit" | "inferred"; sibling?: string };
         scopes: string[];
         scopesFrom: "sibling" | "collection" | "namespace" | "none";
+        /** codeSyntax.WEB for the new variable, in the file's style, so it links to its CSS name explicitly. */
+        codeSyntax: string;
       }
     | { op: "delete-figma"; variableId: string; destructive: true }
     | { op: "lock-only" }
@@ -275,6 +281,7 @@ export type UnresolvedReason =
   | "figma-mode-missing"
   | "no-code-mode-selector"
   | "depends-on-unresolved"
+  | "code-syntax-unmatched"
   | "unsupported";
 
 export interface Unresolved {
@@ -306,7 +313,7 @@ export interface Plan {
 // ---------- Figma change set: the contract with the skill ----------
 
 export type FigmaOperation =
-  | { op: "create-variable"; name: string; collectionId: string; resolvedType: "COLOR" | "FLOAT" | "STRING" | "BOOLEAN"; scopes: string[] }
+  | { op: "create-variable"; name: string; collectionId: string; resolvedType: "COLOR" | "FLOAT" | "STRING" | "BOOLEAN"; scopes: string[]; codeSyntax?: string }
   | ({ op: "set-value"; modeId: string; value: FigmaValue } & ({ variableId: string } | { variableName: string }))
   | { op: "delete-variable"; variableId: string };
 

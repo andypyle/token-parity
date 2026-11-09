@@ -85,7 +85,7 @@ describe("cli: plan -> apply -> commit", () => {
     const planned = await cli("plan", ...inputs);
     expect(planned.code).toBe(0);
     expect(planned.stdout).toContain("# token-parity plan");
-    expect(planned.stdout).toContain("in Semantic (scopes: ALL_FILLS, STROKE_COLOR, EFFECT_COLOR; named like `color-bg`)");
+    expect(planned.stdout).toContain("in Semantic (code: `var(--color-muted)`; scopes: ALL_FILLS, STROKE_COLOR, EFFECT_COLOR; named like `color-bg`)");
 
     const applied = await cli("apply", "--lock", p("tokens.lock.json"));
     expect(applied.code).toBe(0);

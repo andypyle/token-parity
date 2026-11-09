@@ -239,12 +239,17 @@ dependency or a private registry), not a local path.
 
 ## Good to know
 
-- **Matching names.** Figma `color/brand/primary` matches CSS `--color-brand-primary`. After the first
-  sync the lock remembers each variable's Figma ID, so renaming a variable in Figma doesn't break the
+- **Matching names.** The best link is the variable's **code syntax** (`codeSyntax.WEB`, set in Figma's
+  variable editor and shown in Dev Mode). `var(--color-primary)` or `--color-primary` maps straight to
+  that CSS variable. Other forms work when they point at exactly one token in your CSS: a Tailwind class
+  like `bg-primary`, `p-4` or `rounded-md`, a Sass `$color-primary`, or `theme.colors.primary`. Without
+  code syntax, Figma `color/brand/primary` matches `--color-brand-primary` by name. After the first sync
+  the lock also remembers each variable's Figma ID, so renaming a variable in Figma doesn't break the
   match.
 - **New Figma variables** are named and scoped like the closest existing variable. For example,
   `color-brand-secondary` next to `Color/Brand Primary` becomes `Color/Brand Secondary`. If there's
-  nothing similar, you're asked for a name.
+  nothing similar, you're asked for a name. They also get their code syntax set (`var(--color-brand-secondary)`,
+  or whatever style the file already uses), so developers see the right name in Dev Mode.
 - **Modes.** `@theme` values are the first mode of each Figma collection (usually Light). Overrides in
   `.dark` (or your configured selectors) are the matching Figma mode.
 - **Units.** Figma numbers are pixels. `1rem` in CSS equals `16` in Figma (configurable with `remBase`).

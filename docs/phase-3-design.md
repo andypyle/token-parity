@@ -138,3 +138,23 @@ for an unchanged one. For 300 variables in two modes, that means:
 | `check`, Figma unchanged | about 70k | about 1k |
 | `check`, Figma changed | about 70k | about 33k |
 | Sync | about 140k (two exports) | about 35k (one export plus the push script) |
+
+## Matching by codeSyntax
+
+A Figma variable's `codeSyntax.WEB` is the designer's own record of its name in code, so it is the
+strongest matching signal. Keys come from, in order: `codeSyntax.WEB`, then the lock's variable ID, then
+the name rule (`a/b/c` ↔ `--a-b-c`).
+
+- **Direct forms.** `var(--x)` and `--x` map to `x` even when code lacks it, which is then a real
+  `missing-in-code`.
+- **Other forms.** Tailwind utilities (the prefix maps to a namespace, and the variable's type tells
+  `text-` color from font size), Sass `$x`, Less `@x`, camelCase and dotted JS paths only produce
+  candidates. They match when exactly one candidate exists in code; otherwise a warning says what was
+  tried, and the variable falls back to its name. Arbitrary values (`bg-[#fff]`) never match.
+- **Unmatched variables.** If such a variable is missing in code, `plan` reports it
+  (`code-syntax-unmatched`) instead of adding a CSS token under a guessed name.
+- **Remaps.** A `codeSyntax` that resolves to a different key than the lock records is reported as info.
+  Two variables resolving to one key is an error.
+- **New variables.** Variables created from code get `codeSyntax.WEB` set in the file's majority direct
+  style (`var(--x)` by default). The export carries it as `code`, only when set, and the post-push
+  prediction includes it.

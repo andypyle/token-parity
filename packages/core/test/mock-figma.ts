@@ -4,7 +4,7 @@
 interface ExportJson {
   colorProfile?: string;
   variableCollections: Record<string, { id: string; name: string; modes: Array<{ modeId: string; name: string }>; defaultModeId: string }>;
-  variables: Record<string, { id: string; name: string; resolvedType: string; variableCollectionId: string; valuesByMode: Record<string, unknown>; scopes?: string[] }>;
+  variables: Record<string, { id: string; name: string; resolvedType: string; variableCollectionId: string; valuesByMode: Record<string, unknown>; scopes?: string[]; codeSyntax?: Record<string, string> }>;
 }
 
 const f32 = (v: unknown) => {
@@ -23,6 +23,7 @@ export function mockFigma(source: ExportJson, profile: "SRGB" | "DISPLAY_P3" | "
   class MockVariable {
     remote = false;
     scopes: string[];
+    codeSyntax: Record<string, string> = {};
     valuesByMode: Record<string, unknown> = {};
     constructor(
       public id: string,
@@ -40,10 +41,14 @@ export function mockFigma(source: ExportJson, profile: "SRGB" | "DISPLAY_P3" | "
     remove() {
       variables.delete(this.id);
     }
+    setVariableCodeSyntax(platform: string, value: string) {
+      this.codeSyntax = { ...this.codeSyntax, [platform]: value };
+    }
   }
 
   for (const v of Object.values(source.variables)) {
     const mv = new MockVariable(v.id, v.name, v.resolvedType, v.variableCollectionId, v.scopes ?? ["ALL_SCOPES"]);
+    if (v.codeSyntax) mv.codeSyntax = { ...v.codeSyntax };
     for (const [m, value] of Object.entries(v.valuesByMode)) mv.valuesByMode[m] = f32(value);
     variables.set(v.id, mv);
   }

@@ -122,6 +122,7 @@ describe("push script", () => {
     await runInFigma(pushScript(applied.figmaChanges), mock.figma);
     const created = [...mock.variables.values()].find((v) => v.name === "color/muted")!;
     expect(created.scopes).toEqual(["ALL_FILLS", "STROKE_COLOR", "EFFECT_COLOR"]);
+    expect(created.codeSyntax).toEqual({ WEB: "var(--color-muted)" });
   });
 
   it("refuses a change set altered in transit", async () => {

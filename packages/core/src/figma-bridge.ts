@@ -67,7 +67,11 @@ export async function tpBuildExport(figma: any): Promise<any> {
         }
         return typeof value === "number" ? tpF32(value) : value;
       });
-      variables.push({ id: short("VariableID:", v.id), name: v.name, type: v.resolvedType, scopes: (v.scopes || []).slice().sort(), values });
+      const web = v.codeSyntax && v.codeSyntax.WEB;
+      const entry: any = { id: short("VariableID:", v.id), name: v.name, type: v.resolvedType, scopes: (v.scopes || []).slice().sort() };
+      if (web) entry.code = web; // codeSyntax.WEB, only when set
+      entry.values = values;
+      variables.push(entry);
     }
     out.push({
       id: short("VariableCollectionId:", c.id),
@@ -176,6 +180,7 @@ export async function tpPushChanges(figma: any, changes: any, changesChecksum: s
     if (op.op === "create-variable") {
       const v = figma.variables.createVariable(op.name, collections.get(op.collectionId), op.resolvedType);
       v.scopes = op.scopes || [];
+      if (op.codeSyntax) v.setVariableCodeSyntax("WEB", op.codeSyntax);
       created.set(op.name, v);
     } else if (op.op === "set-value") {
       const v = op.variableId ? varById.get(op.variableId) : created.get(op.variableName);
