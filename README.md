@@ -291,6 +291,23 @@ round. A one-way mode (for example `"source": "figma"` in the config) would work
 The direction would be a setting you choose up front, not a guess. A token changed on both sides would
 still be shown to you, just with Figma's value as the planned fix.
 
+### Publishing to npm
+
+Install with `npm install -D token-parity` instead of building from source, and run `npx token-parity
+check` in CI without vendoring the package.
+
+### Larger syncs in one go
+
+One push carries about 300 changes today, because of the Figma MCP's code size limit. Bigger syncs would
+be split into several pushes automatically. Each part would still be checked against the state Figma
+should be in before it runs, so the safety checks stay the same.
+
+### Library variables
+
+Variables published from a Figma library show up as broken aliases today, because exports only include
+the file's local variables. Library support would read them, so aliases to a shared library resolve and
+compare like any other token.
+
 ## Development
 
 ```
