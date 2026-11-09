@@ -237,6 +237,12 @@ function copyValue(ctx: Ctx, finding: Finding, f: NormalizedToken, c: Normalized
   const fSingle = f.modes.length === 1 && f.modes[0] === DEFAULT_MODE;
   const cSingle = c.modes.length === 1 && c.modes[0] === DEFAULT_MODE;
 
+  // A mode value removed on the winning side would mean deleting one mode on the other side.
+  if (!(dir === "figma-to-code" ? pair.figma : pair.code)) {
+    const removedFrom = dir === "figma-to-code" ? "Figma" : "code";
+    return unresolve(ctx, finding, "unsupported", `"${pair.mode}" was removed from ${removedFrom}; remove it from the other side by hand, or resolve ${finding.token}:${pair.mode} the other way`);
+  }
+
   if (dir === "figma-to-code") {
     const fv = pair.figma!;
     // A single-mode code token gets a mode override rather than having its shared default overwritten.

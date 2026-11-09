@@ -1,0 +1,7 @@
+/* Figma has light, dark and contrast. Code defines only light (@theme) and dark (.dark). */
+@theme {
+  --color-bg: oklch(0.985 0 0);
+}
+.dark {
+  --color-bg: oklch(0.21 0.006 285.9);
+}
