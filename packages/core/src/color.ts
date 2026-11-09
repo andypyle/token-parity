@@ -93,8 +93,8 @@ export function rgbClose(a: RgbColor, b: Rgba, tolerance: number): boolean {
 const trim = (n: number, places: number) => String(round(n, places));
 
 /** Format as `oklch(L C H)` / `oklch(L C H / A)`. Defaults to enough precision to be lossless for authored values. */
-export function formatOklch(c: OklchColor, precision = { l: 6, c: 6, h: 4 }): string {
-  const h = c.h === null ? "none" : trim(c.h, precision.h);
+export function formatOklch(c: OklchColor, precision = { l: 6, c: 6, h: 4 }, nullHue: "none" | "0" = "none"): string {
+  const h = c.h === null ? nullHue : trim(c.h, precision.h);
   const alpha = c.alpha < 1 ? ` / ${trim(c.alpha, 4)}` : "";
   return `oklch(${trim(c.l, precision.l)} ${trim(c.c, precision.c)} ${h}${alpha})`;
 }

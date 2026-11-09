@@ -1,9 +1,11 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { runCli } from "../src/run-cli.js";
+import { copyFixture, readJsonFile, simulatePush, writeJson } from "./helpers.js";
+import type { FigmaChangeSet } from "../src/types.js";
 
 const F = join(import.meta.dirname, "fixtures");
 
@@ -59,7 +61,8 @@ describe("cli", () => {
 
   it("exits 2 on usage and input errors", async () => {
     expect((await cli()).code).toBe(2);
-    expect((await cli("plan")).stderr).toContain("not implemented yet");
+    expect((await cli("plan")).stderr).toContain("missing --figma, --code, --lock");
+    expect((await cli("deploy")).stderr).toContain("Unknown command: deploy");
     expect((await cli("check", "--figma", "x.json")).code).toBe(2);
     expect((await cli("check", "--figma", "missing.json", "--code", join(F, "conflict", "theme.css"))).stderr).toContain("missing.json");
     expect((await cli(...fixtureArgs("conflict"), "--format", "xml")).code).toBe(2);
@@ -69,5 +72,55 @@ describe("cli", () => {
   it("prints help and version", async () => {
     expect((await cli("--help")).stdout).toContain("Usage:");
     expect((await cli("--version")).stdout).toMatch(/^token-parity \d/);
+  });
+});
+
+describe("cli: plan -> apply -> commit", () => {
+  it("runs the whole flow with default state paths", async () => {
+    const dir = copyFixture(join(F, "..", "plan-fixtures", "new-token-multi-mode"));
+    const p = (f: string) => join(dir, f);
+    const inputs = ["--figma", p("figma.json"), "--code", p("theme.css"), "--lock", p("tokens.lock.json")];
+
+    const planned = await cli("plan", ...inputs);
+    expect(planned.code).toBe(0);
+    expect(planned.stdout).toContain("# token-parity plan");
+    expect(planned.stdout).toContain("named like `color-bg`");
+
+    const applied = await cli("apply", "--lock", p("tokens.lock.json"));
+    expect(applied.code).toBe(0);
+    expect(applied.stdout).toContain(`Figma operation(s) written to ${p(".token-parity/figma-changes.json")}`);
+
+    // Commit before pushing: refused, pending kept.
+    const early = await cli("commit", "--figma", p("figma.json"), "--lock", p("tokens.lock.json"));
+    expect(early.code).toBe(1);
+    expect(early.stdout).toContain("color-muted");
+
+    const changes = readJsonFile<FigmaChangeSet>(p(".token-parity/figma-changes.json"));
+    writeJson(p("fresh.json"), simulatePush(readJsonFile(p("figma.json")), changes));
+    const committed = await cli("commit", "--figma", p("fresh.json"), "--lock", p("tokens.lock.json"));
+    expect(committed.code).toBe(0);
+
+    const after = await cli("check", "--figma", p("fresh.json"), "--code", p("theme.css"), "--lock", p("tokens.lock.json"));
+    expect(after.code).toBe(0);
+    expect(after.stdout).toContain("**In sync.**");
+  });
+
+  it("plan exits 1 with hints when decisions remain, and --prefer settles first-sync differences", async () => {
+    const dir = copyFixture(join(F, "value-mismatch"));
+    const args = ["plan", "--figma", join(dir, "figma.json"), "--code", join(dir, "theme.css"), "--lock", join(dir, "tokens.lock.json")];
+    const first = await cli(...args);
+    expect(first.code).toBe(1);
+    expect(first.stdout).toContain("Pass --prefer code\\|figma");
+    expect((await cli(...args, "--prefer", "code")).code).toBe(0);
+    expect((await cli(...args, "--prefer", "both")).code).toBe(2);
+  });
+
+  it("apply exits 2 on a stale plan", async () => {
+    const dir = copyFixture(join(F, "..", "plan-fixtures", "prefer-figma"));
+    await cli("plan", "--figma", join(dir, "figma.json"), "--code", join(dir, "theme.css"), "--lock", join(dir, "tokens.lock.json"), "--prefer", "figma");
+    writeFileSync(join(dir, "theme.css"), "@theme { --color-bg: red; }\n");
+    const r = await cli("apply", "--lock", join(dir, "tokens.lock.json"));
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain("re-run plan");
   });
 });

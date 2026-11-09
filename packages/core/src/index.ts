@@ -9,3 +9,8 @@ export { parseLock } from "./lock.js";
 export { renderJson } from "./report/json.js";
 export { renderMarkdown } from "./report/markdown.js";
 export { InputError } from "./errors.js";
+export { plan, planExitCode, readResolutions, type PlanOptions } from "./plan.js";
+export { applyPlan, StalePlanError, type ApplyOptions, type ApplyResult } from "./apply.js";
+export { commitPending, type CommitResult } from "./commit.js";
+export { renderPlanMarkdown } from "./report/plan-markdown.js";
+export { inferFigmaName } from "./naming.js";
