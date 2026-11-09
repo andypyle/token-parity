@@ -1,12 +1,7 @@
 #!/usr/bin/env node
-import { VERSION } from "./index.js";
+import { runCli } from "./run-cli.js";
 
-const [command] = process.argv.slice(2);
-
-if (!command || command === "--version") {
-  console.log(`token-parity ${VERSION}`);
-  process.exit(0);
-}
-
-console.error(`Unknown command: ${command}`);
-process.exit(1);
+process.exitCode = await runCli(process.argv.slice(2), {
+  stdout: (s) => process.stdout.write(s),
+  stderr: (s) => process.stderr.write(s),
+});

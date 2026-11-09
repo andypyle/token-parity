@@ -1,0 +1,2 @@
+{ "exitCode": 1, "actions": [],
+  "unresolved": [ { "finding": "conflict:color-brand-primary:default", "reason": "conflict" } ] }

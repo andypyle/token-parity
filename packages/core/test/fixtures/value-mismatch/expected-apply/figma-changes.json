@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "colorProfile": "srgb",
+  "operations": [
+    { "op": "set-value", "variableId": "V:4", "modeId": "1:0", "value": { "type": "COLOR", "r": 0.223056, "g": 0.505183, "b": 0.964919, "a": 1 } },
+    { "op": "set-value", "variableId": "V:1", "modeId": "1:0", "value": { "type": "COLOR", "r": 0.534875, "g": 0.2618, "b": 0.860658, "a": 1 } }
+  ]
+}

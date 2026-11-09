@@ -1,0 +1,11 @@
+@theme inline {
+  --color-surface: var(--surface);
+}
+
+:root {
+  --surface: oklch(0.985 0 0);
+}
+
+.dark {
+  --surface: oklch(0.68 0.16 150);
+}

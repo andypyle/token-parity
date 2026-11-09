@@ -1,0 +1,6 @@
+{
+  "exitCode": 1,
+  "findings": [
+    { "id": "conflict:color-brand-primary:default", "kind": "conflict", "token": "color-brand-primary", "mode": "default", "severity": "error", "suggestedDirection": "needs-decision" }
+  ]
+}

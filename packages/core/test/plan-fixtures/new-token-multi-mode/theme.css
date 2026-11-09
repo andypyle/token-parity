@@ -1,0 +1,10 @@
+@theme {
+  --color-blue-500: oklch(0.62 0.19 259.8);
+  --color-bg: oklch(0.985 0 0);
+  --color-muted: oklch(0.55 0.22 300);
+}
+
+.dark {
+  --color-bg: oklch(0.21 0.006 285.9);
+  --color-muted: oklch(0.6 0.2 30);
+}

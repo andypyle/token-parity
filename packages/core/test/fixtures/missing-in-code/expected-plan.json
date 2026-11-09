@@ -1,0 +1,6 @@
+{ "exitCode": 0,
+  "actions": [
+    { "id": "add-code:color-brand-secondary:*", "op": "add-code", "via": "suggested" },
+    { "id": "delete-figma:color-legacy:*", "op": "delete-figma", "via": "suggested" }
+  ],
+  "unresolved": [] }

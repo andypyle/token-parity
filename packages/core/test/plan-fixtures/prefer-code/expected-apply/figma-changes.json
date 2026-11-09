@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "colorProfile": "srgb",
+  "operations": [
+    { "op": "set-value", "variableId": "V:1", "modeId": "1:0", "value": { "type": "COLOR", "r": 0.093799, "g": 0.093792, "b": 0.105831, "a": 1 } }
+  ]
+}

@@ -1,0 +1,7 @@
+{ "exitCode": 0,
+  "actions": [
+    { "id": "update-code:color-brand-primary:default", "op": "update-code", "via": "resolution" },
+    { "id": "add-figma:radius-md:*", "op": "add-figma", "via": "suggested" }
+  ],
+  "unresolved": [],
+  "skipped": [ "conflict:color-success:default" ] }

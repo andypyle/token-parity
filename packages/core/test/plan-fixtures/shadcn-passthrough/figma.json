@@ -1,0 +1,2 @@
+{ "colorProfile": "srgb", "variableCollections": { "VC:2": { "id": "VC:2", "name": "Semantic", "modes": [{ "modeId": "2:0", "name": "Light" }, { "modeId": "2:1", "name": "Dark" }], "defaultModeId": "2:0" } },
+  "variables": { "V:1": { "id": "V:1", "name": "color/surface", "resolvedType": "COLOR", "variableCollectionId": "VC:2", "valuesByMode": { "2:0": { "r": 0.980256, "g": 0.980256, "b": 0.980256, "a": 1 }, "2:1": { "r": 0.230357, "g": 0.701116, "b": 0.377073, "a": 1 } } } } }

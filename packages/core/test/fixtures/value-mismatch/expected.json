@@ -1,0 +1,9 @@
+{
+  "exitCode": 1,
+  "findings": [
+    { "id": "value-mismatch:color-accent:default", "kind": "value-mismatch", "token": "color-accent", "mode": "default", "severity": "error", "suggestedDirection": "code-to-figma" },
+    { "id": "value-mismatch:color-bg:default", "kind": "value-mismatch", "token": "color-bg", "mode": "default", "severity": "error", "suggestedDirection": "needs-decision" },
+    { "id": "value-mismatch:color-brand-primary:default", "kind": "value-mismatch", "token": "color-brand-primary", "mode": "default", "severity": "error", "suggestedDirection": "code-to-figma" },
+    { "id": "value-mismatch:spacing-4:default", "kind": "value-mismatch", "token": "spacing-4", "mode": "default", "severity": "error", "suggestedDirection": "figma-to-code" }
+  ]
+}

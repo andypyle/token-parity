@@ -1,0 +1,4 @@
+{ "version": 1, "figmaColorProfile": "srgb", "tokens": {
+  "color-keep": { "type": "color", "modes": { "default": { "oklch": "oklch(0.62 0.19 259.8)", "figmaRgb": { "r": 0.223056, "g": 0.505183, "b": 0.964919, "a": 1 } } } },
+  "color-old": { "type": "color", "modes": { "default": { "oklch": "oklch(0.6 0.2 30)", "figmaRgb": { "r": 0.871648, "g": 0.241823, "b": 0.175167, "a": 1 } } } },
+  "color-gone": { "type": "color", "modes": { "default": { "oklch": "oklch(0.55 0.22 300)", "figmaRgb": { "r": 0.534875, "g": 0.2618, "b": 0.860658, "a": 1 } } } } } }

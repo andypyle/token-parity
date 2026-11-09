@@ -1,0 +1,13 @@
+{
+  "colorProfile": "srgb",
+  "variableCollections": {
+    "VC:2": { "id": "VC:2", "name": "Semantic", "modes": [{ "modeId": "2:0", "name": "Light" }, { "modeId": "2:1", "name": "Dark" }, { "modeId": "2:2", "name": "Contrast" }], "defaultModeId": "2:0" }
+  },
+  "variables": {
+    "V:1": { "id": "V:1", "name": "color/bg", "resolvedType": "COLOR", "variableCollectionId": "VC:2",
+             "valuesByMode": {
+               "2:0": { "r": 0.980256, "g": 0.980256, "b": 0.980256, "a": 1 },
+               "2:1": { "r": 0.093799, "g": 0.093792, "b": 0.105831, "a": 1 },
+               "2:2": { "r": 1, "g": 1, "b": 1, "a": 1 } } }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "colorProfile": "srgb",
+  "operations": [
+    { "op": "create-variable", "name": "Color/Brand Secondary", "collectionId": "VC:1", "resolvedType": "COLOR", "scopes": ["ALL_FILLS", "STROKE_COLOR", "EFFECT_COLOR"] },
+    { "op": "set-value", "variableName": "Color/Brand Secondary", "modeId": "1:0", "value": { "type": "COLOR", "r": 0.534875, "g": 0.2618, "b": 0.860658, "a": 1 } }
+  ]
+}

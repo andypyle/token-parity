@@ -1,0 +1,2 @@
+{ "exitCode": 1, "actions": [],
+  "unresolved": [ { "finding": "missing-mode:color-bg:contrast", "reason": "no-code-mode-selector" } ] }

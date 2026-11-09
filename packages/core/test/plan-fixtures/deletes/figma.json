@@ -1,0 +1,2 @@
+{ "colorProfile": "srgb", "variableCollections": { "VC:1": { "id": "VC:1", "name": "Primitives", "modes": [{ "modeId": "1:0", "name": "Value" }], "defaultModeId": "1:0" } },
+  "variables": { "V:1": { "id": "V:1", "name": "color/keep", "resolvedType": "COLOR", "variableCollectionId": "VC:1", "valuesByMode": { "1:0": { "r": 0.223056, "g": 0.505183, "b": 0.964919, "a": 1 } } }, "V:2": { "id": "V:2", "name": "color/old", "resolvedType": "COLOR", "variableCollectionId": "VC:1", "valuesByMode": { "1:0": { "r": 0.871648, "g": 0.241823, "b": 0.175167, "a": 1 } } } } }
