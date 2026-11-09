@@ -156,19 +156,25 @@ describe("cli: config file and Figma bridge", () => {
   it("figma-script export prints runnable code; verify-export checks the saved file", async () => {
     const dir = copyFixture(join(F, "near-match"));
     const code = (await cli("figma-script", "export")).stdout;
-    const result = (await runInFigma(code, mockFigma(readJsonFile(join(dir, "figma.json"))).figma)) as { json: string; checksum: string };
+    const result = (await runInFigma(code, mockFigma(readJsonFile(join(dir, "figma.json"))).figma)) as { export: unknown; checksum: string };
+    const json = JSON.stringify(result.export);
 
-    writeFileSync(join(dir, "export.json"), JSON.stringify(JSON.parse(result.json), null, 2)); // pretty-printing is fine
+    writeFileSync(join(dir, "export.json"), json); // any formatting verifies; verify-export stores it canonically
     expect((await cli("verify-export", "--figma", join(dir, "export.json"), "--checksum", result.checksum)).code).toBe(0);
+    expect(readFileSync(join(dir, "export.json"), "utf8")).toBe(`${JSON.stringify(result.export, null, 2)}\n`);
 
-    const tampered = result.json.replace(/"r":0\.22/, '"r":0.23');
-    expect(tampered).not.toBe(result.json);
+    // With the saved file, the generated script asks Figma for "unchanged" instead of the data.
+    const known = (await cli("figma-script", "export", "--figma", join(dir, "export.json"))).stdout;
+    expect(await runInFigma(known, mockFigma(readJsonFile(join(dir, "figma.json"))).figma)).toMatchObject({ unchanged: true });
+
+    const tampered = json.replace(/0\.22/, "0.23");
+    expect(tampered).not.toBe(json);
     writeFileSync(join(dir, "export.json"), tampered);
     const bad = await cli("verify-export", "--figma", join(dir, "export.json"), "--checksum", result.checksum);
     expect(bad.code).toBe(1);
     expect(bad.stdout).toContain("MISMATCH");
 
-    writeFileSync(join(dir, "export.json"), result.json.slice(0, 100));
+    writeFileSync(join(dir, "export.json"), json.slice(0, 100));
     expect((await cli("verify-export", "--figma", join(dir, "export.json"), "--checksum", result.checksum)).stdout).toContain("not valid JSON");
   });
 

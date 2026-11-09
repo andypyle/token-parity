@@ -55,10 +55,12 @@ plan and push state. If their dark mode isn't `.dark`,
 
 1. Run `npx token-parity figma-script export`. Pass its entire stdout as the `code` of a `use_figma`
    call. It's read-only.
-2. The result is `{ checksum, json, variables, collections, colorProfile, warnings }`. Write the `json`
-   string to the config's `figma` path, exactly as returned.
-3. Run `npx token-parity verify-export --checksum <checksum>`. On `MISMATCH`, write the file once more
-   from the same result and verify again. If it still fails, stop and tell the user.
+2. If the result is `{ unchanged: true }`, the saved export is already current. Skip to the next step of
+   your workflow; there is nothing to write or verify.
+3. Otherwise write the result's `export` object, as JSON, to the config's `figma` path. Write it compactly,
+   on one line. Then run `npx token-parity verify-export --checksum <checksum>`. It confirms the file
+   and stores it in a canonical layout. On `MISMATCH`, write it once more and verify again. If it still
+   fails, stop and tell the user.
 4. Mention any `warnings`. A "legacy color profile" warning is normal: Figma creates files that way, and
    colors are treated as sRGB.
 
@@ -91,11 +93,13 @@ Offer to sync if there is drift.
    - If it prints "Nothing to push to Figma", the lock is already written. Go to step 6.
    - Otherwise, continue with step 5.
 5. **Push and commit.**
-   1. Run `npx token-parity figma-script push`. Pass its entire stdout to `use_figma` unchanged.
-   2. The push verifies itself, changes nothing if anything is off, and returns the ids it created,
-      updated and deleted.
-   3. Export again (the full Export steps).
-   4. Run `npx token-parity commit`. If it reports changes that aren't in sync, show them and stop. The
+   1. Run `npx token-parity figma-script push`. Pass its entire stdout to `use_figma` unchanged. The push
+      verifies itself and changes nothing if anything is off.
+   2. Pass the push result to commit through a quoted heredoc, with no re-export:
+      `npx token-parity commit --push-result - <<'EOF'` then the result JSON, then `EOF`. The engine
+      predicts Figma's new export and checks it against the push's checksum.
+   3. If commit says the state "differs from the engine's prediction", do the full Export, then run
+      `npx token-parity commit`. If commit reports changes that aren't in sync, show them and stop. The
       pending lock is kept, so nothing is lost.
 6. **Confirm** with `npx token-parity check`. Tell the user what changed on each side, and that the CSS,
    lock and export files are ready to commit.

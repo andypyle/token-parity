@@ -68,6 +68,8 @@ const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "obj
  */
 export function readFigmaExport(input: unknown, file: string, keyByVariableId: ReadonlyMap<string, string> = new Map()): TokenSet {
   if (!isObject(input)) throw new InputError("expected a JSON object", file);
+  if (input.format !== undefined) input = expandCompactExport(input, file);
+  if (!isObject(input)) throw new InputError("expected a JSON object", file);
   const { variableCollections, variables, colorProfile } = input;
   if (!isObject(variableCollections)) throw new InputError("`variableCollections` must be an object keyed by id", file);
   if (!isObject(variables)) throw new InputError("`variables` must be an object keyed by id", file);
@@ -188,4 +190,51 @@ function toValue(raw: unknown, type: TokenType, profile: ColorProfile, byId: Map
       if (typeof raw !== "boolean") throw new InputError(`${where}: expected a boolean`, file);
       return { kind: "boolean", value: raw, raw: String(raw) };
   }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Compact export (token-parity/compact@1), written by the plugin to keep transfers small.
+
+export const COMPACT_FORMAT = "token-parity/compact@1";
+
+/** Restore a full id from its compact form: constant prefix dropped, or "!" + the raw id. */
+export function fullId(prefix: string, short: string): string {
+  return short.startsWith("!") ? short.slice(1) : prefix + short;
+}
+
+/** Expand the compact export into the REST-like shape (variableCollections / variables keyed by id). */
+export function expandCompactExport(input: Record<string, unknown>, file: string): Record<string, unknown> {
+  if (input.format !== COMPACT_FORMAT) throw new InputError(`unsupported export format ${JSON.stringify(input.format)}`, file);
+  if (!Array.isArray(input.collections)) throw new InputError("`collections` must be an array", file);
+  const variableCollections: Record<string, unknown> = {};
+  const variables: Record<string, unknown> = {};
+
+  for (const c of input.collections as unknown[]) {
+    if (!isObject(c) || typeof c.id !== "string" || typeof c.name !== "string" || !Array.isArray(c.modes) || !Array.isArray(c.variables)) {
+      throw new InputError("malformed collection in compact export", file);
+    }
+    const collectionId = fullId("VariableCollectionId:", c.id);
+    const modes = (c.modes as unknown[]).map((m) => {
+      if (!Array.isArray(m) || typeof m[0] !== "string" || typeof m[1] !== "string") throw new InputError(`malformed mode in ${c.name}`, file);
+      return { modeId: m[0] as string, name: m[1] as string };
+    });
+    variableCollections[collectionId] = { id: collectionId, name: c.name, modes, defaultModeId: c.default };
+
+    for (const v of c.variables as unknown[]) {
+      if (!isObject(v) || typeof v.id !== "string" || typeof v.name !== "string" || !Array.isArray(v.values)) {
+        throw new InputError(`malformed variable in ${c.name}`, file);
+      }
+      const id = fullId("VariableID:", v.id);
+      const valuesByMode: Record<string, unknown> = {};
+      modes.forEach((m, i) => {
+        const value = (v.values as unknown[])[i];
+        if (value === null || value === undefined) return;
+        if (Array.isArray(value)) valuesByMode[m.modeId] = { r: value[0], g: value[1], b: value[2], a: value[3] ?? 1 };
+        else if (isObject(value) && typeof value.alias === "string") valuesByMode[m.modeId] = { type: "VARIABLE_ALIAS", id: fullId("VariableID:", value.alias) };
+        else valuesByMode[m.modeId] = value;
+      });
+      variables[id] = { id, name: v.name, resolvedType: v.type, variableCollectionId: collectionId, valuesByMode, scopes: v.scopes };
+    }
+  }
+  return { colorProfile: input.colorProfile, variableCollections, variables };
 }

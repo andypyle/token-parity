@@ -1,11 +1,12 @@
-import { existsSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { readFigmaExport } from "../src/adapters/figma.js";
+import { expandCompactExport, readFigmaExport } from "../src/adapters/figma.js";
 import { applyPlan } from "../src/apply.js";
 import { check } from "../src/check.js";
-import { commitPending } from "../src/commit.js";
-import { tpChecksum } from "../src/figma-bridge.js";
+import { commitFromPush, commitPending } from "../src/commit.js";
+import { tpChecksum, tpF32 } from "../src/figma-bridge.js";
+import type { PushResult } from "../src/predict.js";
 import { exportScript, jsonChecksum, pushScript } from "../src/figma-script.js";
 import { plan } from "../src/plan.js";
 import type { FigmaChangeSet } from "../src/types.js";
@@ -13,11 +14,13 @@ import { copyFixture, readJsonFile } from "./helpers.js";
 import { mockFigma, runInFigma } from "./mock-figma.js";
 
 const ROOT = import.meta.dirname;
-type ExportResult = { checksum: string; json: string; variables: number; collections: number; colorProfile: string; warnings: string[] };
+type ExportResult = { unchanged: boolean; checksum: string; export: { colorProfile: string }; variables: number; collections: number; warnings: string[] };
 
-async function exportFrom(figma: unknown): Promise<ExportResult> {
-  return (await runInFigma(exportScript(), figma)) as ExportResult;
+async function exportFrom(figma: unknown, known: string | null = null): Promise<ExportResult> {
+  return (await runInFigma(exportScript(known), figma)) as ExportResult;
 }
+/** What the skill writes to the export file: the `export` object, as JSON. */
+const exportText = (r: ExportResult) => JSON.stringify(r.export);
 
 describe("checksum", () => {
   it("is stable and formatting-independent", () => {
@@ -38,21 +41,28 @@ describe("export script", () => {
     const { figma } = mockFigma(source);
     const result = await exportFrom(figma);
 
-    expect(result.checksum).toBe(jsonChecksum(result.json));
-    expect(result).toMatchObject({ variables: 6, collections: 2, colorProfile: "srgb", warnings: [] });
-    const set = readFigmaExport(JSON.parse(result.json), "export.json");
+    expect(result.checksum).toBe(jsonChecksum(exportText(result)));
+    expect(result).toMatchObject({ unchanged: false, variables: 6, collections: 2, warnings: [] });
+    const set = readFigmaExport(JSON.parse(exportText(result)), "export.json");
     expect([...set.tokens.keys()].sort()).toEqual(["color-accent", "color-bg", "color-blue-500", "color-fg", "color-surface", "radius-md"]);
     expect(set.tokens.get("color-bg")!.source.figma!.scopes).toEqual(["ALL_SCOPES"]);
+
+    // The compact export reads back as the same tokens as the full-format source.
+    const full = readFigmaExport(source, "figma.json");
+    for (const [key, token] of full.tokens) {
+      expect(set.tokens.get(key)!.values).toEqual(token.values);
+      expect(set.tokens.get(key)!.source.figma!.modeIds).toEqual(token.source.figma!.modeIds);
+    }
   });
 
   it("is deterministic and reflects the document color profile", async () => {
     const source = readJsonFile<Parameters<typeof mockFigma>[0]>(join(ROOT, "fixtures", "out-of-gamut", "figma.json"));
     const a = await exportFrom(mockFigma(source).figma);
     const b = await exportFrom(mockFigma(source).figma);
-    expect(a.json).toBe(b.json);
-    expect(a.colorProfile).toBe("display-p3");
+    expect(exportText(a)).toBe(exportText(b));
+    expect(a.export.colorProfile).toBe("display-p3");
     const legacy = await exportFrom(mockFigma(source, "LEGACY").figma);
-    expect(legacy.colorProfile).toBe("srgb");
+    expect(legacy.export.colorProfile).toBe("srgb");
     expect(legacy.warnings[0]).toMatch(/legacy/);
   });
 
@@ -69,7 +79,7 @@ describe("push script", () => {
     const dir = copyFixture(fixture);
     const mock = mockFigma(readJsonFile(join(dir, "figma.json")));
     // Start from a real export so the change set's exportChecksum matches what the plugin sees.
-    writeFileSync(join(dir, "figma.json"), (await exportFrom(mock.figma)).json);
+    writeFileSync(join(dir, "figma.json"), exportText(await exportFrom(mock.figma)));
     const options = existsSync(join(dir, "plan-options.json")) ? readJsonFile<{ prefer?: "code" | "figma"; allowDeletes?: boolean }>(join(dir, "plan-options.json")) : {};
     const p = await plan({
       figmaPath: join(dir, "figma.json"),
@@ -90,15 +100,19 @@ describe("push script", () => {
       const { dir, mock, p, applied } = await setUp(fixture);
       if (!applied.pending) return; // nothing to push for this fixture
 
-      const pushed = (await runInFigma(pushScript(applied.figmaChanges), mock.figma)) as { created: unknown[] };
+      const pushed = (await runInFigma(pushScript(applied.figmaChanges), mock.figma)) as PushResult;
       expect(pushed.created.length).toBe(applied.figmaChanges.operations.filter((o) => o.op === "create-variable").length);
 
-      writeFileSync(join(dir, "figma-fresh.json"), (await exportFrom(mock.figma)).json);
-      const committed = await commitPending(p, join(dir, "figma-fresh.json"));
+      // No second export: the engine predicts it, and the push's checksum confirms it.
+      const committed = await commitFromPush(p, pushed);
+      expect(committed.predictionMismatch).toBeUndefined();
       expect(committed.problems).toEqual([]);
+      expect(committed.ok).toBe(true);
+      const real = await exportFrom(mock.figma);
+      expect(jsonChecksum(readFileSync(join(dir, "figma.json"), "utf8"))).toBe(real.checksum);
 
       const touched = new Set(p.actions.map((a) => a.token));
-      const report = await check({ figmaPath: join(dir, "figma-fresh.json"), codePath: join(dir, "theme.css"), lockPath: join(dir, "tokens.lock.json") });
+      const report = await check({ figmaPath: join(dir, "figma.json"), codePath: join(dir, "theme.css"), lockPath: join(dir, "tokens.lock.json") });
       expect(report.findings.filter((f) => touched.has(f.token) && f.severity !== "warning")).toEqual([]);
     });
   }
@@ -133,5 +147,56 @@ describe("push script", () => {
     const before = JSON.stringify([...mock.variables.values()]);
     await expect(runInFigma(pushScript(bad), mock.figma)).rejects.toThrow(/mode nope not in collection/);
     expect(JSON.stringify([...mock.variables.values()])).toBe(before);
+  });
+});
+
+describe("token weight", () => {
+  it("tpF32 gives the shortest decimal for the same float32", () => {
+    expect(tpF32(Math.fround(0.223056))).toBe(0.223056);
+    expect(tpF32(0.22305600345134735)).toBe(0.223056);
+    expect(tpF32(16)).toBe(16);
+    expect(tpF32(-0)).toBe(0);
+    expect(Math.fround(tpF32(Math.fround(1 / 3)))).toBe(Math.fround(1 / 3));
+  });
+
+  it("answers `unchanged` with no data when Figma matches the saved export", async () => {
+    const source = readJsonFile<Parameters<typeof mockFigma>[0]>(join(ROOT, "fixtures", "in-sync-no-lock", "figma.json"));
+    const mock = mockFigma(source);
+    const first = await exportFrom(mock.figma);
+    const again = await exportFrom(mock.figma, first.checksum);
+    expect(again).toEqual({ unchanged: true, checksum: first.checksum, warnings: [] });
+
+    mock.variables.get("V:2")!.setValueForMode("1:0", 9);
+    const changed = await exportFrom(mock.figma, first.checksum);
+    expect(changed.unchanged).toBe(false);
+    expect(changed.export).toBeDefined();
+  });
+
+  it("is much smaller than the full format", async () => {
+    const source = readJsonFile<Parameters<typeof mockFigma>[0]>(join(ROOT, "fixtures", "in-sync-no-lock", "figma.json"));
+    const compact = exportText(await exportFrom(mockFigma(source).figma));
+    // What the previous plugin returned for the same Figma state: full ids, float32 noise, and an escaped string.
+    const previous = JSON.stringify(expandCompactExport(JSON.parse(compact), "x.json"), (_, v) => (typeof v === "number" ? Math.fround(v) : v));
+    const transferred = (s: string) => JSON.stringify(s).length;
+    expect(compact.length).toBeLessThan(transferred(previous) * 0.6);
+  });
+
+  it("falls back cleanly when Figma's post-push state differs from the prediction", async () => {
+    const dir = copyFixture(join(ROOT, "plan-fixtures", "prefer-code"));
+    const mock = mockFigma(readJsonFile(join(dir, "figma.json")));
+    writeFileSync(join(dir, "figma.json"), exportText(await exportFrom(mock.figma)));
+    const p = await plan({ figmaPath: join(dir, "figma.json"), codePath: join(dir, "theme.css"), lockPath: join(dir, "tokens.lock.json"), prefer: "code", resolutionsPath: null, figmaCollection: null });
+    const applied = await applyPlan(p, { allowDeletes: false });
+    const pushed = (await runInFigma(pushScript(applied.figmaChanges), mock.figma)) as PushResult;
+
+    const before = readFileSync(join(dir, "figma.json"), "utf8");
+    const mismatch = await commitFromPush(p, { ...pushed, exportChecksum: "00000000000000" });
+    expect(mismatch).toMatchObject({ ok: false, predictionMismatch: true });
+    expect(readFileSync(join(dir, "figma.json"), "utf8")).toBe(before); // nothing written
+    expect(existsSync(join(dir, ".token-parity", "pending.json"))).toBe(true);
+
+    // The fallback: a real export, then a normal commit.
+    writeFileSync(join(dir, "fresh.json"), exportText(await exportFrom(mock.figma)));
+    expect((await commitPending(p, join(dir, "fresh.json"))).ok).toBe(true);
   });
 });

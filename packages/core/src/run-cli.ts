@@ -5,7 +5,7 @@ import { dirname } from "node:path";
 import { parseArgs, type ParseArgsConfig } from "node:util";
 import { applyPlan, StalePlanError } from "./apply.js";
 import { check, exitCodeFor, parseJson } from "./check.js";
-import { commitPending } from "./commit.js";
+import { commitFromPush, commitPending } from "./commit.js";
 import { CONFIG_FILE, loadConfig, settingsFromConfig, type Config } from "./config.js";
 import { exportScript, jsonChecksum, pushScript } from "./figma-script.js";
 import { InputError } from "./errors.js";
@@ -24,10 +24,11 @@ Usage:
   token-parity plan   --figma <file> --code <file> --lock <file> [--prefer code|figma]
                       [--resolutions <file>] [--figma-collection <name>] [--out <file>]
   token-parity apply  (--plan <file> | --lock <file>) [--allow-deletes] [--changes-out <file>]
-  token-parity commit --figma <fresh export> (--plan <file> | --lock <file>)
+  token-parity commit (--push-result <json|file|-> | --figma <fresh export>) (--plan <file> | --lock <file>)
 
 Figma bridge (used by the Claude Code skill with the Figma MCP's use_figma tool):
-  token-parity figma-script export               print use_figma code that exports variables
+  token-parity figma-script export [--figma <f>]  print use_figma code that exports variables
+                                                 (answers "unchanged" if Figma still matches <f>)
   token-parity figma-script push [--changes <f>] print use_figma code that applies a change set
   token-parity verify-export --figma <file> --checksum <c>
                                                  confirm a saved export matches what Figma returned
@@ -91,8 +92,8 @@ const OPTIONS = {
     ...COMPARE_OPTIONS,
   },
   apply: { plan: { type: "string" }, lock: { type: "string" }, "allow-deletes": { type: "boolean" }, "changes-out": { type: "string" } },
-  commit: { figma: { type: "string" }, plan: { type: "string" }, lock: { type: "string" } },
-  "figma-script": { changes: { type: "string" }, lock: { type: "string" } },
+  commit: { figma: { type: "string" }, plan: { type: "string" }, lock: { type: "string" }, "push-result": { type: "string" } },
+  "figma-script": { changes: { type: "string" }, lock: { type: "string" }, figma: { type: "string" } },
   "verify-export": { figma: { type: "string" }, checksum: { type: "string" } },
 } as const satisfies Record<string, ParseArgsConfig["options"]>;
 
@@ -240,9 +241,22 @@ async function runApply(v: Values, io: CliIO): Promise<number> {
 }
 
 async function runCommit(v: Values, io: CliIO): Promise<number> {
-  const [figmaPath] = required(v, "figma");
   const p = await loadPlan(v);
-  const result = await commitPending(p, figmaPath!);
+  const pushArg = str(v, "push-result");
+  let result;
+  if (pushArg) {
+    result = await commitFromPush(p, await readPushResult(pushArg));
+    if (result.predictionMismatch) {
+      io.stdout(
+        "Figma's state after the push differs from the engine's prediction (nothing is wrong yet). " +
+          "Export again (figma-script export, save, verify-export), then run: token-parity commit\n",
+      );
+      return 1;
+    }
+  } else {
+    const [figmaPath] = required(v, "figma");
+    result = await commitPending(p, figmaPath!);
+  }
   for (const d of result.diagnostics) io.stderr(`${d.level}: ${d.message}\n`);
   if (!result.ok) {
     io.stdout(`Not committed: ${result.problems.length} change(s) are not in sync yet. The pending lock is kept.\n`);
@@ -253,10 +267,35 @@ async function runCommit(v: Values, io: CliIO): Promise<number> {
   return 0;
 }
 
+async function readPushResult(arg: string): Promise<{ created: Array<{ id: string; name: string }>; exportChecksum: string }> {
+  let text = arg;
+  if (arg === "-") text = await readStdin();
+  else if (!arg.trimStart().startsWith("{")) text = await readFile(arg, "utf8").catch(() => {
+    throw new InputError("cannot read push result", arg);
+  });
+  return parseJson(text, "--push-result") as { created: Array<{ id: string; name: string }>; exportChecksum: string };
+}
+
+async function readStdin(): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
+  return Buffer.concat(chunks).toString("utf8");
+}
+
 async function runFigmaScript(v: Values, positionals: string[], io: CliIO): Promise<number> {
   const [kind] = positionals;
   if (kind === "export") {
-    io.stdout(exportScript());
+    // Embed the saved export's checksum so an unchanged Figma file costs no transfer.
+    const saved = str(v, "figma");
+    let known: string | null = null;
+    if (saved && existsSync(saved)) {
+      try {
+        known = jsonChecksum(await readFile(saved, "utf8"));
+      } catch {
+        known = null;
+      }
+    }
+    io.stdout(exportScript(known));
     return 0;
   }
   if (kind !== "push") throw new UsageError("figma-script needs `export` or `push`");
@@ -294,6 +333,9 @@ async function runVerifyExport(v: Values, io: CliIO): Promise<number> {
     io.stdout(`MISMATCH: ${figmaPath} has checksum ${actual}, Figma returned ${expected}. Write the export's \`json\` string to the file again, exactly as returned.\n`);
     return 1;
   }
+  // Store it in one canonical layout so git diffs stay readable whoever wrote the file.
+  const canonical = toJson(JSON.parse(text));
+  if (canonical !== text) await writeFile(figmaPath!, canonical);
   io.stdout(`OK: ${figmaPath} matches the Figma export (${expected}).\n`);
   return 0;
 }

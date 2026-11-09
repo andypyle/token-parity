@@ -2,7 +2,8 @@
 
 Status: implemented. This document describes what was built; the types live in `packages/core/src/types.ts`.
 
-`check` finds drift. This phase adds the commands that fix it. The engine still only reads and writes
+`check` finds drift. (Phase 3 note: Figma exports now use a compact format, `token-parity/compact@1`, described in
+phase-3-design.md. The full REST-like format below is still accepted.) This phase adds the commands that fix it. The engine still only reads and writes
 files. Changes for Figma go into a change set that the skill pushes over MCP in Phase 3.
 
 ## Flow

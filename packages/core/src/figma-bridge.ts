@@ -26,65 +26,77 @@ export function tpChecksum(json: string): string {
   return tpCyrb53(json).toString(16).padStart(14, "0");
 }
 
-/** Local variables in the export format the engine reads. Deterministic: sorted by id. */
+/**
+ * Shortest decimal that is the same float32 as x. Figma stores variable numbers as float32, so this is
+ * lossless for exported values and much shorter (0.22305600345134735 -> 0.223056).
+ */
+export function tpF32(x: number): number {
+  if (typeof x !== "number" || !isFinite(x)) return x;
+  const f = Math.fround(x);
+  for (let p = 1; p <= 9; p++) {
+    const t = Number(f.toPrecision(p));
+    if (Math.fround(t) === f) return t === 0 ? 0 : t;
+  }
+  return f;
+}
+
+/**
+ * Local variables in the compact export format (token-parity/compact@1). Deterministic: collections and
+ * variables sorted by id, scopes sorted (Figma reorders them), ids without their constant prefixes.
+ */
 export async function tpBuildExport(figma: any): Promise<any> {
   const byId = (a: any, b: any) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  const short = (prefix: string, id: string) => (id.indexOf(prefix) === 0 ? id.slice(prefix.length) : "!" + id);
   const collections = (await figma.variables.getLocalVariableCollectionsAsync()).filter((c: any) => !c.remote).sort(byId);
   const vars = (await figma.variables.getLocalVariablesAsync()).filter((v: any) => !v.remote).sort(byId);
 
-  const variableCollections: any = {};
+  const out: any[] = [];
   for (const c of collections) {
-    variableCollections[c.id] = {
-      id: c.id,
-      name: c.name,
-      modes: c.modes.map((m: any) => ({ modeId: m.modeId, name: m.name })),
-      defaultModeId: c.defaultModeId,
-    };
-  }
-
-  const variables: any = {};
-  for (const v of vars) {
-    const valuesByMode: any = {};
-    for (const modeId of Object.keys(v.valuesByMode).sort()) {
-      const value = v.valuesByMode[modeId];
-      if (value && typeof value === "object" && value.type === "VARIABLE_ALIAS") {
-        valuesByMode[modeId] = { type: "VARIABLE_ALIAS", id: value.id };
-      } else if (value && typeof value === "object" && "r" in value) {
-        valuesByMode[modeId] = { r: value.r, g: value.g, b: value.b, a: "a" in value ? value.a : 1 };
-      } else {
-        valuesByMode[modeId] = value;
-      }
+    const variables: any[] = [];
+    for (const v of vars) {
+      if (v.variableCollectionId !== c.id) continue;
+      const values = c.modes.map((m: any) => {
+        const value = v.valuesByMode[m.modeId];
+        if (value === undefined || value === null) return null;
+        if (typeof value === "object" && value.type === "VARIABLE_ALIAS") return { alias: short("VariableID:", value.id) };
+        if (typeof value === "object" && "r" in value) {
+          const rgb = [tpF32(value.r), tpF32(value.g), tpF32(value.b)];
+          const a = "a" in value ? tpF32(value.a) : 1;
+          if (a !== 1) rgb.push(a);
+          return rgb;
+        }
+        return typeof value === "number" ? tpF32(value) : value;
+      });
+      variables.push({ id: short("VariableID:", v.id), name: v.name, type: v.resolvedType, scopes: (v.scopes || []).slice().sort(), values });
     }
-    variables[v.id] = {
-      id: v.id,
-      name: v.name,
-      resolvedType: v.resolvedType,
-      variableCollectionId: v.variableCollectionId,
-      valuesByMode,
-      scopes: (v.scopes || []).slice(),
-    };
+    out.push({
+      id: short("VariableCollectionId:", c.id),
+      name: c.name,
+      modes: c.modes.map((m: any) => [m.modeId, m.name]),
+      default: c.defaultModeId,
+      variables,
+    });
   }
 
   const profile = figma.root.documentColorProfile;
-  return { colorProfile: profile === "DISPLAY_P3" ? "display-p3" : "srgb", variableCollections, variables };
+  return { format: "token-parity/compact@1", colorProfile: profile === "DISPLAY_P3" ? "display-p3" : "srgb", collections: out };
 }
 
-/** Entry point for `figma-script export`. Returns the export as a JSON string plus its checksum. */
-export async function tpExportVariables(figma: any): Promise<any> {
+/**
+ * Entry point for `figma-script export`. When Figma still matches the saved export (`known` checksum), returns
+ * only `{ unchanged: true }` so no data crosses the context; otherwise returns the export object.
+ */
+export async function tpExportVariables(figma: any, known: string | null): Promise<any> {
   const data = await tpBuildExport(figma);
-  const json = JSON.stringify(data);
+  const checksum = tpChecksum(JSON.stringify(data));
   const warnings: string[] = [];
   if (figma.root.documentColorProfile === "LEGACY") {
     warnings.push("This file uses Figma's legacy (unmanaged) color profile; colors are treated as sRGB.");
   }
-  return {
-    checksum: tpChecksum(json),
-    collections: Object.keys(data.variableCollections).length,
-    variables: Object.keys(data.variables).length,
-    colorProfile: data.colorProfile,
-    warnings,
-    json,
-  };
+  if (known && known === checksum) return { unchanged: true, checksum, warnings };
+  let variables = 0;
+  for (const c of data.collections) variables += c.variables.length;
+  return { unchanged: false, checksum, collections: data.collections.length, variables, warnings, export: data };
 }
 
 /**
@@ -175,9 +187,11 @@ export async function tpPushChanges(figma: any, changes: any, changesChecksum: s
     }
   }
 
+  // Checksum of Figma's new state, so the engine can confirm its predicted export without a re-export.
   return {
     created: Array.from(created.values()).map((v: any) => ({ id: v.id, name: v.name })),
     updatedVariableIds: updatedIds,
     deletedVariableIds: deletedIds,
+    exportChecksum: tpChecksum(JSON.stringify(await tpBuildExport(figma))),
   };
 }

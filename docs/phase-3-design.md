@@ -15,9 +15,10 @@ anyone noticing. So every transfer is checksummed, and both ends verify it:
 
 | Step | Produced by | Verified by |
 | --- | --- | --- |
-| Export JSON | Plugin script returns `{ json, checksum }` | `token-parity verify-export --figma <file> --checksum <c>` |
+| Export | Plugin script returns `{ export, checksum }`, or `{ unchanged: true }` when the saved export still matches | `token-parity verify-export --figma <file> --checksum <c>` |
 | Change set | `token-parity figma-script push` embeds the change set and its checksum | The plugin script, before it touches anything |
 | Figma unchanged since export | The change set carries `basedOn.exportChecksum` | The plugin script re-exports and compares, refusing if Figma moved |
+| Post-push state | The push returns the checksum of Figma's new export | `commit --push-result` compares it with the engine's predicted export |
 
 The checksum is cyrb53 (53-bit, plain JS) over `JSON.stringify` of the parsed value, so whitespace and
 pretty-printing don't matter. A transcription error is caught; it is never silently synced.
@@ -107,3 +108,33 @@ Results:
   Figma rounds floats to float32.
 - **Large exports** are also bounded by what can be copied reliably. The checksum catches errors, but a
   file with thousands of variables would be slow to transfer.
+
+## Token weight
+
+Data that crosses the context costs tokens twice: once as the tool result, and once as output when it is
+written to a file. Output tokens are the expensive kind. Three measures keep a sync small:
+
+1. **Compact export (`token-parity/compact@1`).** Variables are grouped under their collection, with values
+   in an array per mode. Constant id prefixes (`VariableID:`, `VariableCollectionId:`) are dropped, and
+   `"!"` marks a raw id that lacks the prefix. Colors are `[r,g,b]`, with alpha only when it isn't 1.
+   Numbers use their shortest float32 form, which is lossless because Figma stores float32. Scopes are
+   sorted, because Figma reorders them. The result comes back as an object, not an escaped string. The
+   adapter still reads the full REST-like format.
+2. **Unchanged exports cost nothing.** `figma-script export` embeds the saved export's checksum. If Figma
+   still matches, the plugin answers `{ unchanged: true }` (about 40 tokens) instead of the data.
+3. **No export after a push.** The push returns the checksum of Figma's new state. `commit --push-result`
+   predicts that export from the pre-push export and the change set (float32 numbers, new ids from the
+   push result). If the checksums match, the engine writes the export itself. If not, the skill does a
+   normal export. A wrong prediction can't be committed.
+
+`verify-export` rewrites the saved file in one canonical layout (2-space JSON), so git diffs read the same
+whoever wrote it.
+
+Measured on the live test file: 118 → 54 tokens per variable per mode for a changed export, and 37 tokens
+for an unchanged one. For 300 variables in two modes, that means:
+
+| | Before | After |
+| --- | --- | --- |
+| `check`, Figma unchanged | about 70k | about 1k |
+| `check`, Figma changed | about 70k | about 33k |
+| Sync | about 140k (two exports) | about 35k (one export plus the push script) |
