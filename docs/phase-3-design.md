@@ -87,3 +87,23 @@ refreshes the export, and CI checks code against the last one.
 
 The skill writes only three files: the config, the resolutions file (the user's decisions), and the Figma
 export (verified by checksum).
+
+## Live test (2026-11-09)
+
+Run end to end against a scratch Figma file through the Figma MCP. The run covered:
+- a first sync with a decision and an approval;
+- a second three-way sync with a conflict, a delete and a renamed variable;
+- a concurrent Figma edit between plan and push.
+
+Results:
+- **Checksums:** four exports passed `verify-export`. The push refused the stale plan and changed nothing.
+  Recovery (export, plan, re-approve) converged.
+- **Float32:** Figma stores floats as float32 (0.223056 becomes 0.22305600345134735), as the mock assumes.
+  The lock's RGB tolerance absorbs this.
+- **Color profile:** new Figma files report `LEGACY`, so the warning is expected and is treated as sRGB.
+- **Size limit:** `use_figma` caps code at 50,000 characters. `figma-script push` refuses larger scripts
+  (about 300 operations) with a hint to sync in batches. Splitting one change set across several calls is
+  future work: each part would need its own expected export, which the engine can't predict because
+  Figma rounds floats to float32.
+- **Large exports** are also bounded by what can be copied reliably. The checksum catches errors, but a
+  file with thousands of variables would be slow to transfer.

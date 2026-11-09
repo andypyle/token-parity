@@ -47,7 +47,8 @@ Ask the user for:
 - where the token files should live (suggest `tokens/`).
 
 Then write the config, following `reference/config.md`. The export goes in a committed path, so CI can run
-`npx token-parity check` without Figma access. If their dark mode isn't `.dark`,
+`npx token-parity check` without Figma access. Add `.token-parity/` to `.gitignore`; it holds temporary
+plan and push state. If their dark mode isn't `.dark`,
 `[data-theme="dark"]` or `@variant dark`, add `modes`.
 
 ## Export (both workflows start here)
@@ -58,7 +59,8 @@ Then write the config, following `reference/config.md`. The export goes in a com
    string to the config's `figma` path, exactly as returned.
 3. Run `npx token-parity verify-export --checksum <checksum>`. On `MISMATCH`, write the file once more
    from the same result and verify again. If it still fails, stop and tell the user.
-4. Mention any `warnings` (for example, a legacy color profile).
+4. Mention any `warnings`. A "legacy color profile" warning is normal: Figma creates files that way, and
+   colors are treated as sRGB.
 
 ## Check (read-only)
 

@@ -254,6 +254,7 @@ export type Action = ActionBase &
         op: "add-figma";
         name: string;
         collectionId: string;
+        collectionName: string;
         type: TokenType;
         values: Record<string, FigmaValue>; // keyed by modeId
         naming: { source: "explicit" | "inferred"; sibling?: string };

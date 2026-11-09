@@ -85,7 +85,7 @@ describe("cli: plan -> apply -> commit", () => {
     const planned = await cli("plan", ...inputs);
     expect(planned.code).toBe(0);
     expect(planned.stdout).toContain("# token-parity plan");
-    expect(planned.stdout).toContain("named like `color-bg`");
+    expect(planned.stdout).toContain("in Semantic (scopes: ALL_FILLS, STROKE_COLOR, EFFECT_COLOR; named like `color-bg`)");
 
     const applied = await cli("apply", "--lock", p("tokens.lock.json"));
     expect(applied.code).toBe(0);
@@ -182,5 +182,22 @@ describe("cli: config file and Figma bridge", () => {
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("return await tpPushChanges(figma, CHANGES,");
     expect((await cli("figma-script", "nope")).code).toBe(2);
+  });
+});
+
+describe("cli: use_figma size limit", () => {
+  it("refuses a push script over use_figma's code limit, with a way forward", async () => {
+    const dir = copyFixture(join(F, "..", "plan-fixtures", "prefer-code"));
+    const inputs = ["--figma", join(dir, "figma.json"), "--code", join(dir, "theme.css"), "--lock", join(dir, "tokens.lock.json")];
+    await cli("plan", ...inputs, "--prefer", "code");
+    await cli("apply", "--lock", join(dir, "tokens.lock.json"));
+    const changesPath = join(dir, ".token-parity", "figma-changes.json");
+    const changes = readJsonFile<FigmaChangeSet>(changesPath);
+    const op = changes.operations[0]!;
+    changes.operations = Array.from({ length: 400 }, () => op);
+    writeJson(changesPath, changes);
+    const r = await cli("figma-script", "push", "--lock", join(dir, "tokens.lock.json"));
+    expect(r.code).toBe(2);
+    expect(r.stderr).toMatch(/over use_figma's 50000 limit \(400 operations\).*skip/);
   });
 });

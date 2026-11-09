@@ -101,6 +101,9 @@ type Values = Record<string, string | boolean | string[] | undefined>;
 
 class UsageError extends Error {}
 
+/** use_figma's maximum code length (Figma MCP tool schema). */
+export const USE_FIGMA_CODE_LIMIT = 50_000;
+
 export async function runCli(argv: string[], io: CliIO): Promise<number> {
   const [command, ...rest] = argv;
   if (command === "--version" || command === "-v") {
@@ -227,7 +230,8 @@ async function runApply(v: Values, io: CliIO): Promise<number> {
   if (result.pending) {
     io.stdout(
       `${result.figmaChanges.operations.length} Figma operation(s) written to ${result.changesPath}.\n` +
-        "Push them to Figma, export the variables again, then run: token-parity commit --figma <fresh export>\n",
+        "Push them to Figma (token-parity figma-script push), export the variables again to the same file,\n" +
+        "then run: token-parity commit\n",
     );
   } else {
     io.stdout(`Nothing to push to Figma; wrote ${p.inputs.lock.path}.\n`);
@@ -263,7 +267,14 @@ async function runFigmaScript(v: Values, positionals: string[], io: CliIO): Prom
   if (changes?.version !== 1 || !Array.isArray(changes.operations) || !changes.basedOn?.exportChecksum) {
     throw new InputError("not a token-parity change set (or made before export checksums); re-run plan and apply", path);
   }
-  io.stdout(pushScript(changes));
+  const script = pushScript(changes);
+  if (script.length > USE_FIGMA_CODE_LIMIT) {
+    throw new UsageError(
+      `the push script is ${script.length} characters, over use_figma's ${USE_FIGMA_CODE_LIMIT} limit (${changes.operations.length} operations). ` +
+        "Sync in smaller batches: mark some items \"skip\" in the resolutions file, then plan and apply again.",
+    );
+  }
+  io.stdout(script);
   return 0;
 }
 

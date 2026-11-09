@@ -353,6 +353,7 @@ function addFigma(ctx: Ctx, finding: Finding, c: NormalizedToken, via: Via) {
       op: "add-figma",
       name,
       collectionId: collection.id,
+      collectionName: collection.name,
       type: c.type,
       values,
       naming: explicit ? { source: "explicit" } : { source: "inferred", sibling: inferred!.sibling },
