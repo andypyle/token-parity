@@ -67,7 +67,7 @@ transfer is checksummed in both directions, so a corrupted value is caught inste
 token-parity isn't on npm yet. Build it from this repo and add it to your project:
 
 ```sh
-git clone <this repo> token-parity && cd token-parity
+git clone https://github.com/andypyle/token-parity.git && cd token-parity
 pnpm install && pnpm build
 cd /path/to/your-project
 npm install -D /path/to/token-parity/packages/core   # provides `npx token-parity`
