@@ -66,6 +66,34 @@ records each variable's id, so custom names and later renames in Figma stay matc
 
 Design notes: [docs/phase-2-design.md](docs/phase-2-design.md).
 
+## Config
+
+Put defaults in `token-parity.config.json` so commands (and CI) need no flags:
+
+```json
+{
+  "figmaFile": "https://www.figma.com/design/AbC123/Design-System",
+  "figma": "tokens/figma-variables.json",
+  "code": "src/app.css",
+  "lock": "tokens/tokens.lock.json",
+  "resolutions": "tokens/token-parity.resolutions.json"
+}
+```
+
+Paths are relative to the config file. Commit the export and the lock: CI runs `npx token-parity check`
+against the last export, because the engine never calls Figma itself.
+
+## With Claude Code and Figma
+
+The [token-parity skill](skills/token-parity/SKILL.md) runs the workflow through the Figma MCP. It exports
+variables, checks or plans, asks you about conflicts and new names, applies after your approval, pushes
+the change set, and commits.
+
+The engine generates the `use_figma` code (`token-parity figma-script export|push`). Every transfer is
+checksummed: `verify-export` confirms a saved export matches what Figma returned. The push refuses to run if
+its payload was altered, or if Figma changed since the export. It validates every operation before
+changing anything. See [docs/phase-3-design.md](docs/phase-3-design.md).
+
 ### Color rules
 
 OKLCH in code is canonical and Figma stores RGB. Colors are compared in OKLCH (ΔE_OK), never as strings.
