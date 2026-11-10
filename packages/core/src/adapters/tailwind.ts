@@ -9,8 +9,9 @@
 import postcss, { type AtRule, type ChildNode, type Container, type Declaration, type Rule } from "postcss";
 import { resolveAlias } from "../alias.js";
 import { parseCssColor } from "../color.js";
+import { evaluateColorMix, isColorMix } from "../color-mix.js";
 import { InputError } from "../errors.js";
-import { DEFAULT_MODE, type CodeLocation, type Diagnostic, type ModeName, type NormalizedToken, type TokenSet, type TokenType, type TokenValue } from "../types.js";
+import { DEFAULT_MODE, type CodeLocation, type Diagnostic, type OklchColor, type ModeName, type NormalizedToken, type TokenSet, type TokenType, type TokenValue } from "../types.js";
 
 interface Decl {
   raw: string;
@@ -126,8 +127,51 @@ export function readTailwindCss(
   }
 
   const set: TokenSet = { origin: "code", modes: [...allModes], tokens, diagnostics, ...(prefix ? { tailwindPrefix: prefix } : {}) };
+  evaluateColorMixes(set, prefix);
   for (const token of tokens.values()) token.type = inferType(set, token);
   return set;
+}
+
+/**
+ * Replace color-mix() values with the color they produce, per mode. var() operands resolve in the same mode,
+ * as the browser would. Values that can't be evaluated stay as text, with a warning.
+ */
+function evaluateColorMixes(set: TokenSet, prefix: string | null) {
+  const keyOf = (name: string) => {
+    const bare = name.replace(/^--/, "");
+    return prefix && bare.startsWith(`${prefix}-`) && set.tokens.has(bare.slice(prefix.length + 1)) ? bare.slice(prefix.length + 1) : bare;
+  };
+  const colorOf = (value: TokenValue, mode: ModeName, depth: number): { ok: true; color: OklchColor } | { ok: false; reason: string } => {
+    const r = resolveAlias(set, value, mode);
+    if (!r.ok) return { ok: false, reason: `${value.raw} doesn't resolve` };
+    if (r.value.kind === "color") return { ok: true, color: r.value.color.space === "oklch" ? r.value.color : parseCssColor(r.value.raw)!.color };
+    if (depth < 5 && isColorMix(r.value.raw)) {
+      const nested = evaluateColorMix(r.value.raw, (op) => operand(op, mode, depth + 1));
+      return nested.ok ? nested : { ok: false, reason: nested.reason };
+    }
+    return { ok: false, reason: `${value.raw} isn't a color` };
+  };
+  const operand = (text: string, mode: ModeName, depth: number) => {
+    const ref = VAR_RE.exec(text)?.[1];
+    if (ref) {
+      const target = set.tokens.get(keyOf(ref));
+      if (!target) return { ok: false as const, reason: `${text} isn't a theme token` };
+      const v = target.values[mode] ?? target.values[DEFAULT_MODE]!;
+      return colorOf(v, mode, depth);
+    }
+    const c = parseCssColor(text);
+    return c ? { ok: true as const, color: c.color } : { ok: false as const, reason: `"${text}" isn't a color` };
+  };
+
+  for (const token of set.tokens.values()) {
+    for (const mode of token.modes) {
+      const v = token.values[mode]!;
+      if (v.kind !== "string" || !isColorMix(v.raw)) continue;
+      const r = evaluateColorMix(v.raw, (op) => operand(op, mode, 0));
+      if (r.ok) token.values[mode] = { kind: "color", color: r.color, raw: v.raw };
+      else set.diagnostics.push({ level: "warning", origin: "code", token: token.key, message: `Can't evaluate ${v.raw}: ${r.reason}. This value isn't compared.` });
+    }
+  }
 }
 
 /** `@import "tailwindcss" prefix(ds);` -> "ds". */
@@ -205,6 +249,8 @@ const NAMESPACE_TYPES: Array<[RegExp, TokenType]> = [
 ];
 
 function inferType(set: TokenSet, token: NormalizedToken): TokenType {
+  // An unevaluated color-mix() is still a color.
+  if (Object.values(token.values).some((v) => isColorMix(v.raw))) return "color";
   const first = token.values[token.modes[0]!];
   if (first) {
     const r = resolveAlias(set, first, token.modes[0]!);

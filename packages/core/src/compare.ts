@@ -10,6 +10,7 @@
 import { resolveAlias, type Literal } from "./alias.js";
 import { compileIgnore, type IgnoreMatcher } from "./ignore.js";
 import { cssColorFormat } from "./values.js";
+import { isColorMix } from "./color-mix.js";
 import * as color from "./color.js";
 import {
   DEFAULT_MODE,
@@ -363,6 +364,8 @@ function comparePair(ctx: Ctx, f: NormalizedToken, c: NormalizedToken, pair: Pai
   const byValue = resolvesByValue(fv, cv);
   const fCmp = byValue ? resolvedOr(ctx.figma, fv, pair.figmaMode) : fv;
   const cCmp = byValue ? resolvedOr(ctx.code, cv, runtimeCodeMode(f, pair)) : cv;
+  // A color-mix() code couldn't evaluate was already reported (as a warning); there's nothing to compare.
+  if (cCmp.kind === "string" && isColorMix(cCmp.raw)) return;
   const result =
     fCmp.kind === "color" && cCmp.kind === "color" ? compareColors(ctx, fCmp, cCmp, lockEntry) : compareGeneric(ctx, fCmp, cCmp, lockEntry);
   // A side is unchanged if either its alias or its resolved value is what the lock recorded.
@@ -457,7 +460,8 @@ function formatCheck(
 ) {
   if (cv.kind !== "color" || cCmp.kind !== "color") return;
   const format = cssColorFormat(cv.raw);
-  if (format === "hex" || format === "rgb") return;
+  // color-mix() is an expression over other tokens, not a notation choice: nothing to rewrite.
+  if (format === "hex" || format === "rgb" || isColorMix(cv.raw)) return;
   const bytes = color.srgbBytes(cv.color);
   const hex = bytes ? `#${bytes.slice(0, 3).map((b) => b.toString(16).padStart(2, "0")).join("")}${bytes[3] !== 255 ? bytes[3]!.toString(16).padStart(2, "0") : ""}` : null;
   push(ctx, {

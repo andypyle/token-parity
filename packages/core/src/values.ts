@@ -56,7 +56,7 @@ export function majorityColorFormat(raws: Iterable<string>, exact = false): Writ
   return order.reduce((best, f) => (counts[f] > counts[best] ? f : best), order[0]!);
 }
 
-const byte = (v: number) => Math.round(Math.min(1, Math.max(0, v)) * 255);
+const byte = color.toByte;
 const hex2 = (n: number) => n.toString(16).padStart(2, "0");
 const alphaText = (a: number) => String(Math.round(a * 1000) / 1000);
 

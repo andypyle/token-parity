@@ -9,6 +9,7 @@ import { loadInputs, parseJson } from "./check.js";
 import { compare, lockEntryFor, lockMatches, modeLabel, pairModes, resolvedOr, resolvesByValue, runtimeCodeMode, type Pair } from "./compare.js";
 import { InputError } from "./errors.js";
 import { detectCodeSyntaxStyle, formatCodeSyntax } from "./code-syntax.js";
+import { isColorMix } from "./color-mix.js";
 import { compileIgnore, type IgnoreMatcher } from "./ignore.js";
 import { inferFigmaName } from "./naming.js";
 import {
@@ -265,8 +266,10 @@ function copyValue(ctx: Ctx, finding: Finding, f: NormalizedToken, c: Normalized
 
   if (dir === "figma-to-code") {
     const fv = pair.figma!;
-    // Computed in code (calc(var(--spacing) * n)): there is no declaration to rewrite.
+    // Computed in code (calc(var(--spacing) * n), color-mix(…)): there is no plain value to rewrite.
     if (c.source.code?.derivedFrom) return unresolve(ctx, finding, "computed-in-code", `${c.source.code.selector}, with --${c.source.code.derivedFrom}`);
+    const current = pair.code ?? c.values[DEFAULT_MODE];
+    if (current && isColorMix(current.raw)) return unresolve(ctx, finding, "computed-in-code", current.raw);
     // A single-mode code token gets a mode override rather than having its shared default overwritten.
     let targetMode: ModeName;
     if (cSingle && !fSingle && pair.figmaMode !== f.modes[0]) targetMode = pair.mode; // new override block
@@ -533,7 +536,7 @@ function hint(finding: Finding, reason: UnresolvedReason, detail?: string): stri
     case "code-syntax-unmatched":
       return `Its codeSyntax.WEB (${detail}) matches no token in code, so the CSS name is unknown. Set it in Figma to the CSS variable you want, e.g. var(--color-accent), then re-plan.`;
     case "computed-in-code":
-      return `Code computes this value (${detail}), so it can't be edited directly. Change the base variable in code, change the value in Figma, or resolve ${rk} to "code".`;
+      return `Code computes this value (${detail}), so it can't be edited directly. Change what it's computed from in code, change the value in Figma, or resolve ${rk} to "code".`;
     case "depends-on-unresolved":
       return `Aliases a token that this plan cannot create yet${suffix}. Resolve that token first.`;
     default:
