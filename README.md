@@ -334,6 +334,20 @@ Variables published from a Figma library show up as broken aliases today, becaus
 the file's local variables. Library support would read them, so aliases to a shared library resolve and
 compare like any other token.
 
+### OKLCH, once Figma supports it
+
+Exact matching uses hex or `rgb()` today because Figma stores and shows colors as 8-bit RGB, and the goal
+is that what you see in Figma is what you find in code. If Figma adds OKLCH colors, the same rule extends
+to `oklch()`:
+
+- Exact matching would compare OKLCH values directly, so `colorFormat: "oklch"` would work with
+  `colorMatch: "exact"` instead of being refused.
+- Exports would carry Figma's OKLCH as-is, with no RGB conversion or rounding in between.
+- Display P3 files could be matched exactly, since OKLCH can express colors that hex can't.
+
+Comparison, the written color format and the export format are separate pieces, so this would extend the
+Figma adapter and the exact comparison rather than rework them.
+
 ## Development
 
 ```
