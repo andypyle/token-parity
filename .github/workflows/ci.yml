@@ -21,3 +21,6 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      # The plugin ships the bundled engine committed in skills/token-parity/bin; it must match the source.
+      - name: Plugin bundle is up to date
+        run: git diff --exit-code -- skills/token-parity/bin || (echo "Run pnpm build and commit skills/token-parity/bin/token-parity.mjs" && exit 1)

@@ -8,7 +8,7 @@ description: Check and sync design tokens between Figma variables and Tailwind v
 ## Rules
 
 - Never edit token values or write Plugin API code for token data. Values come from the engine. Figma code
-  comes from `token-parity figma-script`, passed to `use_figma` unchanged.
+  comes from `tp figma-script`, passed to `use_figma` unchanged.
 - Never apply without explicit approval of the plan. Deletes need a separate yes. If a re-plan changes the
   actions, ask again.
 - Never decide conflicts, first-sync differences, or names and collections for new Figma variables. Ask.
@@ -17,8 +17,10 @@ description: Check and sync design tokens between Figma variables and Tailwind v
 
 ## Engine
 
-Run `npx token-parity <command>` where `token-parity.config.json` lives. The config supplies the paths. If
-the package is missing, ask before installing it (`npm i -D token-parity`).
+The engine ships with this skill. Below, `tp` means
+`node "<this skill's base directory>/bin/token-parity.mjs"` (the base directory is shown when the skill
+loads). Run it where `token-parity.config.json` lives; the config supplies the paths. It needs Node 20+;
+if `node` is missing, tell the user.
 
 ## Figma MCP (each session)
 
@@ -37,23 +39,23 @@ Write the config per `reference/config.md`; the export path must be committed. A
 
 ## Export
 
-1. Pass the stdout of `npx token-parity figma-script export` to `use_figma` as `code`.
+1. Pass the stdout of `tp figma-script export` to `use_figma` as `code`.
 2. `{ unchanged: true }`: the saved export is current. Skip steps 3–4 and continue the workflow.
 3. Otherwise write the `export` object as one-line JSON to the config's `figma` path, then run
-   `npx token-parity verify-export --checksum <checksum>`. On MISMATCH, rewrite and verify once more,
+   `tp verify-export --checksum <checksum>`. On MISMATCH, rewrite and verify once more,
    then stop and tell the user.
 4. Relay `warnings`. "Legacy color profile" is normal (treated as sRGB).
 
 ## Check
 
-Export, then `npx token-parity check`. Report drift by token with its suggested direction, and warnings
+Export, then `tp check`. Report drift by token with its suggested direction, and warnings
 (out-of-gamut is a warning, not drift). Offer to sync if there is drift. If the user says some differences
 are intentional (code-only namespaces, Figma-only groups), offer `ignore` patterns (`reference/config.md`)
 and add them only with their yes.
 
 ## Sync
 
-1. Export, then `npx token-parity plan`.
+1. Export, then `tp plan`.
 2. Ask about each "Needs a decision" row with `AskUserQuestion`, up to 4 per call. Record the answers in
    the resolutions file (`reference/resolutions.md`) and re-plan. Repeat until none are left, or the user
    leaves the rest.
@@ -63,11 +65,11 @@ and add them only with their yes.
    - `no-target-collection`: offer the collections that fit the token's modes.
    - Other reasons: explain the hint. These need a manual fix or a skip.
 3. Show the action table and get approval (deletes separately).
-4. `npx token-parity apply`, with `--allow-deletes` only if the deletes were approved. "Nothing to push to
+4. `tp apply`, with `--allow-deletes` only if the deletes were approved. "Nothing to push to
    Figma" means go to step 6.
-5. Pass the stdout of `npx token-parity figma-script push` to `use_figma`. Then pass the result JSON to
-   `npx token-parity commit --push-result - <<'EOF'` … `EOF`. If commit says the state "differs from the
-   engine's prediction", Export, then `npx token-parity commit`. If commit lists tokens that aren't in
+5. Pass the stdout of `tp figma-script push` to `use_figma`. Then pass the result JSON to
+   `tp commit --push-result - <<'EOF'` … `EOF`. If commit says the state "differs from the
+   engine's prediction", Export, then `tp commit`. If commit lists tokens that aren't in
    sync, show them and stop (the pending lock is kept).
-6. `npx token-parity check`. Tell the user what changed on each side, and that the CSS, lock and export
+6. `tp check`. Tell the user what changed on each side, and that the CSS, lock and export
    are ready to commit.

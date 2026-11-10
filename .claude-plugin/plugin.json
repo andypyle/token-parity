@@ -1,0 +1,13 @@
+{
+  "name": "token-parity",
+  "description": "Check and sync design tokens between Figma variables and Tailwind v4 CSS. Finds drift, works out which side changed, asks you about conflicts, and syncs both ways with 1:1 color parity. Uses the Figma MCP.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Andrew Pyle",
+    "url": "https://github.com/andypyle"
+  },
+  "homepage": "https://github.com/andypyle/token-parity",
+  "repository": "https://github.com/andypyle/token-parity",
+  "license": "MIT",
+  "keywords": ["design-tokens", "figma", "figma-variables", "tailwind", "tailwindcss", "css", "design-system", "sync"]
+}
