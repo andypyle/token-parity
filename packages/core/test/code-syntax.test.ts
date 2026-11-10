@@ -249,3 +249,51 @@ describe("Tailwind prefix, round 2 (real project)", () => {
     expect(p.actions.find((a) => a.op === "add-code")).toMatchObject({ token: "dark-fg-1", values: { theme: expect.stringMatching(/^oklch\(/) } });
   });
 });
+
+describe("writing aliases into a prefixed project", () => {
+  // Tailwind doesn't rewrite var() references, so an alias written to code must use the emitted (prefixed) name.
+  async function aliasPlan(figmaTargetCodeSyntax: string | null) {
+    const dir = mkdtempSync(join(tmpdir(), "tp-prefix-alias-"));
+    writeFileSync(
+      join(dir, "theme.css"),
+      '@import "tailwindcss" prefix(ds);\n@theme {\n  --color-gray-900: #1a1f24;\n  --color-on-fill: #ffffff;\n  --color-on-control: var(--ds-color-on-fill);\n}\n\n[data-theme="dark"] {\n  --ds-color-on-control: var(--ds-color-on-fill);\n}\n',
+    );
+    const gray = { r: 26 / 255, g: 31 / 255, b: 36 / 255, a: 1 };
+    writeJson(join(dir, "figma.json"), {
+      colorProfile: "srgb",
+      variableCollections: {
+        P: { id: "P", name: "Primitives", modes: [{ modeId: "p", name: "Value" }], defaultModeId: "p" },
+        C: { id: "C", name: "Color", modes: [{ modeId: "l", name: "Light" }, { modeId: "k", name: "Dark" }], defaultModeId: "l" },
+      },
+      variables: {
+        V1: { id: "V1", name: "color/gray/900", resolvedType: "COLOR", variableCollectionId: "P", ...(figmaTargetCodeSyntax ? { codeSyntax: { WEB: figmaTargetCodeSyntax } } : {}), valuesByMode: { p: gray } },
+        V2: { id: "V2", name: "color/on-fill", resolvedType: "COLOR", variableCollectionId: "P", valuesByMode: { p: { r: 1, g: 1, b: 1, a: 1 } } },
+        V3: { id: "V3", name: "color/on-control", resolvedType: "COLOR", variableCollectionId: "C", valuesByMode: { l: { type: "VARIABLE_ALIAS", id: "V1" }, k: { type: "VARIABLE_ALIAS", id: "V1" } } },
+      },
+    });
+    writeJson(join(dir, "res.json"), { version: 1, resolutions: { "color-on-control:default": "figma", "color-on-control:dark": "figma" } });
+    const inputs = { figmaPath: join(dir, "figma.json"), codePath: join(dir, "theme.css"), lockPath: join(dir, "tokens.lock.json") };
+    const p = await plan({ ...inputs, prefer: null, resolutionsPath: join(dir, "res.json"), figmaCollection: null });
+    return { dir, inputs, p };
+  }
+
+  it("writes the target's codeSyntax verbatim, in @theme and in mode blocks", async () => {
+    const { p } = await aliasPlan("var(--ds-color-gray-900)");
+    const writes = p.actions.filter((a) => a.op === "update-code").map((a) => a.op === "update-code" && [a.cssVar, a.context, a.to]);
+    expect(writes).toEqual([
+      ["--ds-color-on-control", "mode:dark", "var(--ds-color-gray-900)"],
+      ["--color-on-control", "theme", "var(--ds-color-gray-900)"],
+    ]);
+  });
+
+  it("adds the prefix back when the target has no codeSyntax, and the result checks clean", async () => {
+    const { dir, inputs, p } = await aliasPlan(null);
+    expect(p.actions.filter((a) => a.op === "update-code").map((a) => a.op === "update-code" && a.to)).toEqual(["var(--ds-color-gray-900)", "var(--ds-color-gray-900)"]);
+    const { applyPlan } = await import("../src/apply.js");
+    await applyPlan(p, { allowDeletes: false });
+    const css = (await import("node:fs")).readFileSync(join(dir, "theme.css"), "utf8");
+    expect(css).toContain("--color-on-control: var(--ds-color-gray-900);");
+    expect(css).toContain("--ds-color-on-control: var(--ds-color-gray-900);");
+    expect((await check(inputs)).findings.filter((f) => f.token === "color-on-control")).toEqual([]);
+  });
+});

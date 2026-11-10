@@ -106,11 +106,13 @@ export function codeTextFromFigma(
   like: TokenValue | undefined,
   settings: CompareSettings,
   fileFormat: Written = "oklch",
+  /** How to write a reference to another token, e.g. var(--ds-color-x) in a prefixed Tailwind project. */
+  varRef: (key: string) => string = (key) => `var(--${key})`,
 ): Converted<string> {
   switch (fv.kind) {
     case "alias":
       if (fv.ref.startsWith("figma-variable:")) return { ok: false, reason: "alias target is not in the Figma export" };
-      return { ok: true, value: `var(--${fv.ref})`, lock: { alias: fv.ref } };
+      return { ok: true, value: varRef(fv.ref), lock: { alias: fv.ref } };
     case "color": {
       const rgb = figmaRgbOf(fv);
       if (!rgb || fv.color.space === "oklch") return { ok: false, reason: "not an RGB color" };

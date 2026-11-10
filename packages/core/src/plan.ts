@@ -8,7 +8,7 @@ import { readFile } from "node:fs/promises";
 import { loadInputs, parseJson } from "./check.js";
 import { compare, lockEntryFor, lockMatches, modeLabel, pairModes, resolvedOr, resolvesByValue, runtimeCodeMode, sameValue, type Pair } from "./compare.js";
 import { InputError } from "./errors.js";
-import { detectCodeSyntaxStyle, formatCodeSyntax } from "./code-syntax.js";
+import { codeSyntaxVarName, detectCodeSyntaxStyle, formatCodeSyntax } from "./code-syntax.js";
 import { isColorMix } from "./color-mix.js";
 import { compileIgnore, type IgnoreMatcher } from "./ignore.js";
 import { inferFigmaName } from "./naming.js";
@@ -286,7 +286,7 @@ function copyValue(ctx: Ctx, finding: Finding, f: NormalizedToken, c: Normalized
     const loc = c.source.code!.modes[targetMode];
     if (!loc && targetMode !== DEFAULT_MODE && !ctx.settings.modeMap[targetMode]) return unresolve(ctx, finding, "no-code-mode-selector");
 
-    const converted = codeTextFromFigma(forCode(ctx, fv, pair.figmaMode), c.key, c.values[targetMode] ?? c.values[DEFAULT_MODE], ctx.settings, ctx.fileColorFormat);
+    const converted = codeTextFromFigma(forCode(ctx, fv, pair.figmaMode), c.key, c.values[targetMode] ?? c.values[DEFAULT_MODE], ctx.settings, ctx.fileColorFormat, (key) => cssVarRef(ctx, key));
     if (!converted.ok) return unresolve(ctx, finding, fv.kind === "alias" ? "broken-alias" : "unsupported", converted.reason);
 
     push(
@@ -380,7 +380,7 @@ function addCode(ctx: Ctx, finding: Finding, f: NormalizedToken, via: Via) {
   for (const [i, mode] of f.modes.entries()) {
     const codeMode = single || i === 0 ? DEFAULT_MODE : mode;
     if (codeMode !== DEFAULT_MODE && !ctx.settings.modeMap[codeMode]) return unresolve(ctx, finding, "no-code-mode-selector", `mode "${codeMode}"`);
-    const converted = codeTextFromFigma(forCode(ctx, f.values[mode]!, mode), cssKey, undefined, ctx.settings, ctx.fileColorFormat);
+    const converted = codeTextFromFigma(forCode(ctx, f.values[mode]!, mode), cssKey, undefined, ctx.settings, ctx.fileColorFormat, (key) => cssVarRef(ctx, key));
     if (converted.ok && converted.note) notes.push(`${mode}: ${converted.note}`);
     if (!converted.ok) return unresolve(ctx, finding, f.values[mode]!.kind === "alias" ? "broken-alias" : "unsupported", converted.reason);
     values[codeMode === DEFAULT_MODE ? "theme" : `mode:${codeMode}`] = converted.value;
@@ -520,6 +520,17 @@ function comparable(ctx: Ctx, f: NormalizedToken, pair: Pair): [TokenValue, Toke
   return resolvesByValue(pair.figma!, pair.code!)
     ? [resolvedOr(ctx.figma, pair.figma!, pair.figmaMode), resolvedOr(ctx.code, pair.code!, runtimeCodeMode(f, pair))]
     : [pair.figma!, pair.code!];
+}
+
+/**
+ * How code refers to another token. Tailwind doesn't rewrite var(), so with prefix(ds) the reference must use the
+ * emitted name, var(--ds-color-x). The target's codeSyntax.WEB is used verbatim when it names that same token.
+ */
+function cssVarRef(ctx: Ctx, key: TokenKey): string {
+  const prefix = ctx.code.tailwindPrefix;
+  const web = ctx.figma.tokens.get(key)?.source.figma?.codeSyntax?.trim();
+  if (web && /^var\(/.test(web) && codeSyntaxVarName(web, prefix) === key) return web;
+  return prefix ? `var(--${prefix}-${key})` : `var(--${key})`;
 }
 
 /** A Figma alias whose target isn't a CSS token is written to code as its resolved value, not a dangling var(). */
