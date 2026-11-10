@@ -181,7 +181,9 @@ describe("round trip: plan -> apply -> push -> commit leaves touched tokens in s
       }
 
       const report = await check({ figmaPath: join(dir, figmaFile), codePath: join(dir, "theme.css"), lockPath: join(dir, "tokens.lock.json") });
-      const leftovers = report.findings.filter((f) => touched.has(f.token) && f.severity !== "warning");
+      // Everything the plan resolved must be in sync; what it left for the user to decide may remain.
+      const leftForUser = new Set([...p.unresolved.map((u) => u.finding), ...p.skipped]);
+      const leftovers = report.findings.filter((f) => touched.has(f.token) && f.severity !== "warning" && !leftForUser.has(f.id));
       expect(leftovers).toEqual([]);
 
       const again = await planIn(dir, figmaFile);

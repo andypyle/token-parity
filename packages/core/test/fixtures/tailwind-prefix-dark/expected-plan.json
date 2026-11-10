@@ -1,0 +1,6 @@
+{ "exitCode": 1,
+  "actions": [
+    { "id": "lock-only:color-amber-100:default", "op": "lock-only", "via": "near-match" },
+    { "id": "add-code:dark-fg-1:*", "op": "add-code", "via": "suggested" }
+  ],
+  "unresolved": [ { "finding": "missing-mode:color-amber-100:dark", "reason": "figma-mode-missing" } ] }

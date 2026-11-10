@@ -168,7 +168,7 @@ function compareToken(ctx: Ctx, f: NormalizedToken, c: NormalizedToken, lock: Lo
     const lockEntry = lock?.modes[pair.mode] ?? null;
     if (pair.figma && pair.code) {
       if (brokenF.has(pair.figmaMode) || brokenC.has(pair.codeMode)) continue;
-      comparePair(ctx, f, c, pair.mode, pair.figma, pair.code, lockEntry);
+      comparePair(ctx, f, c, pair, lockEntry);
     } else {
       missingMode(ctx, f, c, pair.mode, pair.figma, pair.code, lockEntry);
     }
@@ -198,7 +198,13 @@ export function pairModes(f: NormalizedToken, c: NormalizedToken): Pair[] {
     return [{ mode: DEFAULT_MODE, figmaMode: DEFAULT_MODE, codeMode: DEFAULT_MODE, figma: f.values[DEFAULT_MODE], code: c.values[DEFAULT_MODE] }];
   }
   if (fSingle) {
-    return c.modes.map((m) => ({ mode: m, figmaMode: DEFAULT_MODE, codeMode: m, figma: f.values[DEFAULT_MODE], code: c.values[m] }));
+    // A single-mode Figma collection has nowhere to hold code's extra modes (e.g. a dark override of a
+    // primitive): compare the default, and report each extra code mode as missing in Figma.
+    return c.modes.map((m) =>
+      m === DEFAULT_MODE
+        ? { mode: m, figmaMode: DEFAULT_MODE, codeMode: m, figma: f.values[DEFAULT_MODE], code: c.values[m] }
+        : { mode: m, figmaMode: DEFAULT_MODE, codeMode: m, figma: undefined, code: c.values[m] },
+    );
   }
   if (cSingle) {
     return f.modes.map((m) => ({ mode: m, figmaMode: m, codeMode: DEFAULT_MODE, figma: f.values[m], code: c.values[DEFAULT_MODE] }));
@@ -237,7 +243,10 @@ function missingMode(
     lock: lockEntry,
     changed: { figma: null, code: null },
     suggestedDirection: lockEntry ? (unchangedHere ? deleteOther : "needs-decision") : towardOther,
-    message: `Mode "${mode}" exists in ${side === "figma" ? "Figma" : "code"} but not in ${side === "figma" ? "code" : "Figma"}.`,
+    message:
+      side === "code" && f.modes.length === 1 && f.modes[0] === DEFAULT_MODE
+        ? `Code defines a ${mode} value, but Figma collection "${f.source.figma?.collection}" has no ${mode} mode.`
+        : `Mode "${mode}" exists in ${side === "figma" ? "Figma" : "code"} but not in ${side === "figma" ? "code" : "Figma"}.`,
   });
 }
 
@@ -295,9 +304,22 @@ interface Comparison {
   figmaOklch?: { color: OklchColor; source: "lock" | "converted" };
 }
 
-function comparePair(ctx: Ctx, f: NormalizedToken, c: NormalizedToken, mode: ModeName, fv: TokenValue, cv: TokenValue, lockEntry: LockModeEntry | null) {
+function comparePair(ctx: Ctx, f: NormalizedToken, c: NormalizedToken, pair: Pair, lockEntry: LockModeEntry | null) {
+  const { mode } = pair;
+  const fv = pair.figma!;
+  const cv = pair.code!;
+  // An alias on one side and a literal on the other compare by resolved value: Figma's {dark/fg-1} and
+  // code's #e9edf0 are the same color. Aliases on both sides still compare by target.
+  const oneAlias = (fv.kind === "alias") !== (cv.kind === "alias");
+  const fCmp = oneAlias ? resolvedOr(ctx.figma, fv, pair.figmaMode) : fv;
+  const cCmp = oneAlias ? resolvedOr(ctx.code, cv, pair.codeMode) : cv;
   const result =
-    fv.kind === "color" && cv.kind === "color" ? compareColors(ctx, fv, cv, lockEntry) : compareGeneric(ctx, fv, cv, lockEntry);
+    fCmp.kind === "color" && cCmp.kind === "color" ? compareColors(ctx, fCmp, cCmp, lockEntry) : compareGeneric(ctx, fCmp, cCmp, lockEntry);
+  // A side is unchanged if either its alias or its resolved value is what the lock recorded.
+  if (lockEntry && oneAlias) {
+    if (result.figmaChanged && lockMatches(ctx, "figma", fv, lockEntry)) result.figmaChanged = false;
+    if (result.codeChanged && lockMatches(ctx, "code", cv, lockEntry)) result.codeChanged = false;
+  }
 
   const changed = { figma: result.figmaChanged, code: result.codeChanged };
   gamutCheck(ctx, c, mode, cv, lockEntry, changed);
@@ -376,6 +398,12 @@ function compareColors(
   const distance = color.deltaEOK(figmaOklch.color, compareTo);
   const relation: Relation = distance < SAME_COLOR_EPSILON ? "same" : distance < ctx.settings.nearThreshold ? "near" : "different";
   return { figmaChanged, codeChanged, relation, distance, figmaOklch };
+}
+
+export function resolvedOr(set: TokenSet, value: TokenValue, mode: ModeName): TokenValue {
+  if (value.kind !== "alias") return value;
+  const r = resolveAlias(set, value, mode);
+  return r.ok ? r.value : value;
 }
 
 function compareGeneric(ctx: Ctx, fv: TokenValue, cv: TokenValue, lockEntry: LockModeEntry | null): Comparison {

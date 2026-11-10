@@ -64,6 +64,8 @@ export function readTailwindCss(css: string, file: string, modeMap: Record<ModeN
       cssVar: decl.prop,
       context: contextKey(ctx),
     };
+    // Namespace resets (`--color-*: initial`, `--*: initial`) clear Tailwind's defaults; they aren't tokens.
+    if (decl.prop.endsWith("*")) return;
     if (ctx.kind === "theme") theme.set(decl.prop, entry);
     else if (ctx.kind === "root" || ctx.kind === "mode") {
       const mode = ctx.kind === "root" ? DEFAULT_MODE : ctx.mode;
@@ -81,7 +83,14 @@ export function readTailwindCss(css: string, file: string, modeMap: Record<ModeN
     const key = name.slice(2);
     const perMode = new Map<ModeName, Decl>([[DEFAULT_MODE, decl]]);
 
-    const passThrough = VAR_RE.exec(decl.raw)?.[1];
+    // Tailwind doesn't rewrite var() references, so code writes the emitted (prefixed) name: var(--ds-color-x).
+    const unprefix = (name: string) => {
+      if (!prefix || !name.startsWith(`--${prefix}-`)) return name;
+      const stripped = `--${name.slice(prefix.length + 3)}`;
+      return theme.has(stripped) ? stripped : name;
+    };
+    const rawRef = VAR_RE.exec(decl.raw)?.[1];
+    const passThrough = rawRef ? unprefix(rawRef) : undefined;
     if (passThrough && !theme.has(passThrough) && scoped.get(passThrough)?.has(DEFAULT_MODE)) {
       for (const [mode, d] of scoped.get(passThrough)!) perMode.set(mode, d);
     }
@@ -96,7 +105,7 @@ export function readTailwindCss(css: string, file: string, modeMap: Record<ModeN
     const locations: Record<ModeName, CodeLocation> = {};
     for (const mode of modes) {
       const d = perMode.get(mode)!;
-      values[mode] = parseValue(d.raw, key, diagnostics);
+      values[mode] = parseValue(d.raw, key, diagnostics, unprefix);
       locations[mode] = { cssVar: d.cssVar, context: d.context, line: d.line, selector: d.selector };
       allModes.add(mode);
     }
@@ -165,9 +174,9 @@ function selectorLabel(decl: Declaration): string {
   return parts.join(" ");
 }
 
-function parseValue(raw: string, key: string, diagnostics: Diagnostic[]): TokenValue {
+function parseValue(raw: string, key: string, diagnostics: Diagnostic[], unprefix: (name: string) => string = (n) => n): TokenValue {
   const ref = VAR_RE.exec(raw)?.[1];
-  if (ref) return { kind: "alias", ref: ref.slice(2), raw };
+  if (ref) return { kind: "alias", ref: unprefix(ref).slice(2), raw };
 
   const dim = DIMENSION_RE.exec(raw);
   if (dim) return { kind: "dimension", value: Number(dim[1]), unit: dim[2] as "px" | "rem" | "em" | "%", raw };

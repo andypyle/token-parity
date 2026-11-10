@@ -256,6 +256,14 @@ dependency or a private registry), not a local path.
   or whatever style the file already uses), so developers see the right name in Dev Mode.
 - **Modes.** `@theme` values are the first mode of each Figma collection (usually Light). Overrides in
   `.dark` (or your configured selectors) are the matching Figma mode.
+  A single-mode Figma collection (often Primitives) has no dark mode, so a dark override of one of
+  its tokens in code is reported as exactly that, rather than as a value mismatch.
+- **Aliases vs values.** Figma `{dark/fg-1}` and code `#e9edf0` are equal if the alias resolves to that
+  color, so one side using an alias and the other an inline value isn't drift. Two aliases still
+  compare by what they point at.
+- **Tailwind prefix.** With `prefix(ds)`, code may refer to the emitted names (`var(--ds-color-x)`,
+  `[data-theme="dark"] { --ds-color-x: … }`); both are read as `--color-x`. Namespace resets like
+  `--color-*: initial` are ignored.
 - **Units.** Figma numbers are pixels. `1rem` in CSS equals `16` in Figma (configurable with `remBase`).
   Units already used in your CSS are kept when Figma values are written back.
 - **What to commit:** your CSS, `tokens.lock.json`, the Figma export and the resolutions file. Don't

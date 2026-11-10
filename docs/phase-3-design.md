@@ -165,3 +165,19 @@ the name rule (`a/b/c` ↔ `--a-b-c`).
 - **New variables.** Variables created from code get `codeSyntax.WEB` set in the file's majority direct
   style (`var(--x)` by default). The export carries it as `code`, only when set, and the post-push
   prediction includes it.
+
+## Real-project fixes (Tailwind `prefix(ds)`)
+
+- **`var()` references in CSS use the emitted names.** Tailwind doesn't rewrite them, so code writes
+  `--color-accent: var(--ds-color-green-500)`. A reference whose unprefixed name is a theme token reads as
+  that token, in `@theme` and in mode blocks alike. Prefixed names that aren't theme tokens are left as
+  written.
+- **Namespace resets** (`--color-*: initial`, `--*: initial`) aren't tokens.
+- **Alias against literal.** When exactly one side is an alias, both sides are compared by resolved value,
+  so `{dark/fg-1}` and `#e9edf0` are equal. Lock entries record the resolved Figma RGB. A side counts as
+  unchanged if either its alias or its resolved value matches the lock. A Figma alias copied to code
+  whose target isn't a CSS token is written as its resolved value, never as a dangling `var()`. Two
+  aliases still compare by target.
+- **Single-mode Figma vs code mode overrides.** A token in a single-mode Figma collection is compared on
+  its default only. Each extra code mode is `missing-mode` ("Code defines a dark value, but Figma
+  collection 'Primitives' has no dark mode"), which `plan` leaves for the user (`figma-mode-missing`).

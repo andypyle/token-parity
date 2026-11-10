@@ -199,3 +199,47 @@ describe("plan with a Tailwind prefix", () => {
     expect(p.actions.find((a) => a.op === "add-figma")).toMatchObject({ token: "color-muted", codeSyntax: "var(--ds-color-muted)" });
   });
 });
+
+describe("Tailwind prefix, round 2 (real project)", () => {
+  const dir = join(FIXTURES, "tailwind-prefix-dark");
+
+  it("strips the prefix from var() references and skips namespace resets", () => {
+    const css = readTailwindCss(
+      '@import "tailwindcss" prefix(ds);\n@theme { --color-*: initial; --*: initial; --color-a: red; --color-b: var(--ds-color-a); --color-c: var(--ds-private); }',
+      "a.css",
+      {},
+    );
+    expect([...css.tokens.keys()].sort()).toEqual(["color-a", "color-b", "color-c"]);
+    expect(css.tokens.get("color-b")!.values.default).toMatchObject({ kind: "alias", ref: "color-a" });
+    expect(css.tokens.get("color-c")!.values.default).toMatchObject({ kind: "alias", ref: "ds-private" }); // not a theme token: left as written
+  });
+
+  it("strips the prefix from var() references in mode blocks too", () => {
+    const css = readTailwindCss(
+      '@import "tailwindcss" prefix(ds);\n@theme { --color-a: red; --color-b: blue; --color-c: var(--color-b); }\n.dark { --ds-color-c: var(--ds-color-a); }',
+      "a.css",
+      DEFAULT_SETTINGS.modeMap,
+    );
+    expect(css.tokens.get("color-c")!.values.dark).toMatchObject({ kind: "alias", ref: "color-a" });
+  });
+
+  it("compares an alias against an equal literal as equal, and records the resolved value in the lock", async () => {
+    const report = await runCheck(dir);
+    expect(report.findings.map((f) => f.token)).not.toContain("color-fg-1");
+    expect(report.findings.map((f) => f.token)).not.toContain("color-accent");
+    const p = await plan({ figmaPath: join(dir, "figma.json"), codePath: join(dir, "theme.css"), lockPath: join(dir, "nope.lock.json"), prefer: null, resolutionsPath: null, figmaCollection: null });
+    expect(p.lockAfter.tokens["color-fg-1"]!.modes.dark).toEqual({ oklch: expect.stringMatching(/^oklch\(/), figmaRgb: { r: 0.9137254901960784, g: 0.9294117647058824, b: 0.9411764705882353, a: 1 } });
+  });
+
+  it("says when code has a mode the Figma collection lacks", async () => {
+    const report = await runCheck(dir);
+    expect(report.findings.find((f) => f.id === "missing-mode:color-amber-100:dark")!.message).toBe(
+      'Code defines a dark value, but Figma collection "Primitives" has no dark mode.',
+    );
+  });
+
+  it("writes a Figma alias whose target isn't in code as its resolved value", async () => {
+    const p = await plan({ figmaPath: join(dir, "figma.json"), codePath: join(dir, "theme.css"), lockPath: join(dir, "nope.lock.json"), prefer: null, resolutionsPath: null, figmaCollection: null });
+    expect(p.actions.find((a) => a.op === "add-code")).toMatchObject({ token: "dark-fg-1", values: { theme: expect.stringMatching(/^oklch\(/) } });
+  });
+});

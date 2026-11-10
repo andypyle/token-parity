@@ -1,0 +1,20 @@
+/* Real-project-style, round 2:
+   - namespace resets (--color-*: initial) are not tokens
+   - var() references use the emitted, prefixed name: var(--ds-color-green-500) is --color-green-500
+   - Figma's {dark/fg-1} alias and code's inline #e9edf0 are the same color: compared by resolved value
+   - a dark override of a primitive whose Figma collection has no dark mode: reported as such */
+@import "tailwindcss" prefix(ds);
+
+@theme {
+  --color-*: initial;
+  --radius-*: initial;
+  --color-green-500: oklch(0.62 0.19 259.8);
+  --color-amber-100: rgb(255 242 204);
+  --color-accent: var(--ds-color-green-500);
+  --color-fg-1: oklch(0.21 0.006 285.9);
+}
+
+[data-theme="dark"] {
+  --ds-color-fg-1: #e9edf0;
+  --ds-color-amber-100: #3a2f17;
+}

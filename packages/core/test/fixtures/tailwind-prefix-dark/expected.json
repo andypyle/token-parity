@@ -1,0 +1,8 @@
+{
+  "exitCode": 1,
+  "findings": [
+    { "id": "missing-mode:color-amber-100:dark", "kind": "missing-mode", "token": "color-amber-100", "mode": "dark", "severity": "error", "suggestedDirection": "code-to-figma" },
+    { "id": "near-match:color-amber-100:default", "kind": "near-match", "token": "color-amber-100", "mode": "default", "severity": "info", "suggestedDirection": "none" },
+    { "id": "missing-in-code:dark-fg-1:*", "kind": "missing-in-code", "token": "dark-fg-1", "mode": null, "severity": "error", "suggestedDirection": "figma-to-code" }
+  ]
+}
