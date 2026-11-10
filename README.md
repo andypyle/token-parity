@@ -101,6 +101,20 @@ chooses or edits token values itself; values always come from Figma or from your
 **What to commit:** your CSS, `tokens.lock.json`, the Figma export and the resolutions file. Add
 `.token-parity/` to `.gitignore`; it only holds temporary state.
 
+## Safety
+
+- **Try it on a copy first.** For your first sync, use a duplicate (or a branch) of your Figma file and a git
+  branch of your code. Figma's version history can also undo a sync.
+- **Nothing changes without your approval,** and deletes need a separate yes. Before changing anything in
+  Figma, the push checks that the file is exactly as planned. If it isn't, the push changes nothing.
+- **Files stay in your project.** token-parity only writes and deletes files inside the folder you run it
+  from, even if a config or plan file in a repository you cloned points elsewhere.
+- **Your design data is data.** Claude treats Figma variable names, CSS and reports as data, never as
+  instructions, and tells you if something in them looks like an instruction.
+- **What you commit is visible to whoever can read your repository:** the config holds your Figma file's
+  URL, and the export holds your token names and values. Figma's own access controls still apply to the
+  file itself.
+
 ## Configuration
 
 `token-parity.config.json` lives at your project root. Paths are relative to it. The skill writes it for

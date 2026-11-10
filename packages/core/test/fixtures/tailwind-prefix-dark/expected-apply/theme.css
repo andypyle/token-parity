@@ -1,4 +1,4 @@
-/* Real-project-style, round 2:
+/* Tailwind prefix, round 2:
    - namespace resets (--color-*: initial) are not tokens
    - var() references use the emitted, prefixed name: var(--ds-color-green-500) is --color-green-500
    - Figma's {dark/fg-1} alias and code's inline #e9edf0 are the same color: compared by resolved value

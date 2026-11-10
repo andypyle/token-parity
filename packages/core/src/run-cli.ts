@@ -9,6 +9,7 @@ import { commitFromPush, commitPending } from "./commit.js";
 import { CONFIG_FILE, loadConfig, settingsFromConfig, type Config } from "./config.js";
 import { exportScript, jsonChecksum, pushScript } from "./figma-script.js";
 import { InputError } from "./errors.js";
+import { assertInside } from "./paths.js";
 import { plan, planExitCode } from "./plan.js";
 import { renderJson } from "./report/json.js";
 import { renderMarkdown } from "./report/markdown.js";
@@ -77,7 +78,11 @@ Exit codes:
 export interface CliIO {
   stdout: (s: string) => void;
   stderr: (s: string) => void;
+  /** Project folder: files are only written or deleted inside it. Defaults to the working directory. */
+  cwd?: string;
 }
+
+const rootOf = (io: CliIO) => io.cwd ?? process.cwd();
 
 const COMPARE_OPTIONS = {
   "near-threshold": { type: "string" },
@@ -217,6 +222,7 @@ async function runPlan(v: Values, config: Config, io: CliIO): Promise<number> {
     settings: { ...settingsFromConfig(config), ...settingsFrom(v) },
   });
   const out = str(v, "out") ?? defaultPlanPath(lockPath!);
+  assertInside(rootOf(io), out, "the plan file");
   await mkdir(dirname(out), { recursive: true });
   await writeFile(out, toJson(p));
   io.stdout(renderPlanMarkdown(p));
@@ -236,7 +242,7 @@ async function loadPlan(v: Values): Promise<Plan> {
 async function runApply(v: Values, io: CliIO): Promise<number> {
   const p = await loadPlan(v);
   const changesOut = str(v, "changes-out");
-  const result = await applyPlan(p, { allowDeletes: v["allow-deletes"] === true, ...(changesOut ? { changesOut } : {}) });
+  const result = await applyPlan(p, { allowDeletes: v["allow-deletes"] === true, root: rootOf(io), ...(changesOut ? { changesOut } : {}) });
   io.stdout(`Applied ${result.applied.length} action${result.applied.length === 1 ? "" : "s"}.\n`);
   if (result.skipped.length > 0) io.stdout(`Skipped ${result.skipped.length} delete${result.skipped.length === 1 ? "" : "s"} (pass --allow-deletes): ${result.skipped.join(", ")}\n`);
   if (result.pending) {
@@ -256,7 +262,7 @@ async function runCommit(v: Values, io: CliIO): Promise<number> {
   const pushArg = str(v, "push-result");
   let result;
   if (pushArg) {
-    result = await commitFromPush(p, await readPushResult(pushArg));
+    result = await commitFromPush(p, await readPushResult(pushArg), rootOf(io));
     if (result.predictionMismatch) {
       io.stdout(
         "Figma's state after the push differs from the engine's prediction (nothing is wrong yet). " +
@@ -266,7 +272,7 @@ async function runCommit(v: Values, io: CliIO): Promise<number> {
     }
   } else {
     const [figmaPath] = required(v, "figma");
-    result = await commitPending(p, figmaPath!);
+    result = await commitPending(p, figmaPath!, rootOf(io));
   }
   for (const d of result.diagnostics) io.stderr(`${d.level}: ${d.message}\n`);
   if (!result.ok) {
@@ -330,6 +336,7 @@ async function runFigmaScript(v: Values, positionals: string[], io: CliIO): Prom
 
 async function runVerifyExport(v: Values, io: CliIO): Promise<number> {
   const [figmaPath, expected] = required(v, "figma", "checksum");
+  if (!/^[0-9a-f]{14}$/.test(expected!)) throw new UsageError("--checksum must be the 14-character checksum the Figma export returned");
   const text = await readFile(figmaPath!, "utf8").catch(() => {
     throw new InputError("cannot read file", figmaPath);
   });
@@ -346,7 +353,10 @@ async function runVerifyExport(v: Values, io: CliIO): Promise<number> {
   }
   // Store it in one canonical layout so git diffs stay readable whoever wrote the file.
   const canonical = toJson(JSON.parse(text));
-  if (canonical !== text) await writeFile(figmaPath!, canonical);
+  if (canonical !== text) {
+    assertInside(rootOf(io), figmaPath!, "the Figma export");
+    await writeFile(figmaPath!, canonical);
+  }
   io.stdout(`OK: ${figmaPath} matches the Figma export (${expected}).\n`);
   return 0;
 }

@@ -1,11 +1,53 @@
 {
   "exitCode": 1,
   "findings": [
-    { "id": "alias-mismatch:color-accent-soft:dark", "kind": "alias-mismatch", "token": "color-accent-soft", "mode": "dark", "severity": "error", "suggestedDirection": "needs-decision" },
-    { "id": "alias-mismatch:color-on-control:dark", "kind": "alias-mismatch", "token": "color-on-control", "mode": "dark", "severity": "error", "suggestedDirection": "needs-decision" },
-    { "id": "alias-mismatch:color-on-control:default", "kind": "alias-mismatch", "token": "color-on-control", "mode": "default", "severity": "error", "suggestedDirection": "needs-decision" },
-    { "id": "missing-in-figma:color-on-fill:*", "kind": "missing-in-figma", "token": "color-on-fill", "mode": null, "severity": "error", "suggestedDirection": "code-to-figma" },
-    { "id": "missing-mode:color-green-100:dark", "kind": "missing-mode", "token": "color-green-100", "mode": "dark", "severity": "error", "suggestedDirection": "code-to-figma" },
-    { "id": "missing-in-code:dark-green-100:*", "kind": "missing-in-code", "token": "dark-green-100", "mode": null, "severity": "error", "suggestedDirection": "figma-to-code" }
+    {
+      "id": "alias-mismatch:color-accent-soft:dark",
+      "kind": "alias-mismatch",
+      "token": "color-accent-soft",
+      "mode": "dark",
+      "severity": "error",
+      "suggestedDirection": "needs-decision"
+    },
+    {
+      "id": "missing-mode:color-green-100:dark",
+      "kind": "missing-mode",
+      "token": "color-green-100",
+      "mode": "dark",
+      "severity": "error",
+      "suggestedDirection": "code-to-figma"
+    },
+    {
+      "id": "alias-mismatch:color-on-control:dark",
+      "kind": "alias-mismatch",
+      "token": "color-on-control",
+      "mode": "dark",
+      "severity": "error",
+      "suggestedDirection": "needs-decision"
+    },
+    {
+      "id": "alias-mismatch:color-on-control:default",
+      "kind": "alias-mismatch",
+      "token": "color-on-control",
+      "mode": "default",
+      "severity": "error",
+      "suggestedDirection": "needs-decision"
+    },
+    {
+      "id": "missing-in-figma:color-on-fill:*",
+      "kind": "missing-in-figma",
+      "token": "color-on-fill",
+      "mode": null,
+      "severity": "error",
+      "suggestedDirection": "code-to-figma"
+    },
+    {
+      "id": "missing-in-code:dark-green-100:*",
+      "kind": "missing-in-code",
+      "token": "dark-green-100",
+      "mode": null,
+      "severity": "error",
+      "suggestedDirection": "figma-to-code"
+    }
   ]
 }

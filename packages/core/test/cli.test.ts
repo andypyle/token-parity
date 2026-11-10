@@ -11,9 +11,14 @@ import type { FigmaChangeSet } from "../src/types.js";
 const F = join(import.meta.dirname, "fixtures");
 
 async function cli(...args: string[]) {
+  return cliIn(undefined, ...args);
+}
+
+/** Run the CLI with `cwd` as the project folder, as a user would from their project root. */
+async function cliIn(cwd: string | undefined, ...args: string[]) {
   let stdout = "";
   let stderr = "";
-  const code = await runCli(args, { stdout: (s) => (stdout += s), stderr: (s) => (stderr += s) });
+  const code = await runCli(args, { stdout: (s) => (stdout += s), stderr: (s) => (stderr += s), ...(cwd ? { cwd } : {}) });
   return { code, stdout, stderr };
 }
 const fixtureArgs = (name: string, lock = true) => [
@@ -84,26 +89,26 @@ describe("cli: plan -> apply -> commit", () => {
     const p = (f: string) => join(dir, f);
     const inputs = ["--figma", p("figma.json"), "--code", p("theme.css"), "--lock", p("tokens.lock.json")];
 
-    const planned = await cli("plan", ...inputs, "--color-match", "perceptual");
+    const planned = await cliIn(dir, "plan", ...inputs, "--color-match", "perceptual");
     expect(planned.code).toBe(0);
     expect(planned.stdout).toContain("# token-parity plan");
     expect(planned.stdout).toContain("in Semantic (code: `var(--color-muted)`; scopes: ALL_FILLS, STROKE_COLOR, EFFECT_COLOR; named like `color-bg`)");
 
-    const applied = await cli("apply", "--lock", p("tokens.lock.json"));
+    const applied = await cliIn(dir, "apply", "--lock", p("tokens.lock.json"));
     expect(applied.code).toBe(0);
     expect(applied.stdout).toContain(`Figma operation(s) written to ${p(".token-parity/figma-changes.json")}`);
 
     // Commit before pushing: refused, pending kept.
-    const early = await cli("commit", "--figma", p("figma.json"), "--lock", p("tokens.lock.json"));
+    const early = await cliIn(dir, "commit", "--figma", p("figma.json"), "--lock", p("tokens.lock.json"));
     expect(early.code).toBe(1);
     expect(early.stdout).toContain("color-muted");
 
     const changes = readJsonFile<FigmaChangeSet>(p(".token-parity/figma-changes.json"));
     writeJson(p("fresh.json"), simulatePush(readJsonFile(p("figma.json")), changes));
-    const committed = await cli("commit", "--figma", p("fresh.json"), "--lock", p("tokens.lock.json"));
+    const committed = await cliIn(dir, "commit", "--figma", p("fresh.json"), "--lock", p("tokens.lock.json"));
     expect(committed.code).toBe(0);
 
-    const after = await cli("check", "--figma", p("fresh.json"), "--code", p("theme.css"), "--lock", p("tokens.lock.json"), "--color-match", "perceptual");
+    const after = await cliIn(dir, "check", "--figma", p("fresh.json"), "--code", p("theme.css"), "--lock", p("tokens.lock.json"), "--color-match", "perceptual");
     expect(after.code).toBe(0);
     expect(after.stdout).toContain("**In sync.**");
   });
@@ -111,18 +116,18 @@ describe("cli: plan -> apply -> commit", () => {
   it("plan exits 1 with hints when decisions remain, and --prefer settles first-sync differences", async () => {
     const dir = copyFixture(join(F, "value-mismatch"));
     const args = ["plan", "--figma", join(dir, "figma.json"), "--code", join(dir, "theme.css"), "--lock", join(dir, "tokens.lock.json")];
-    const first = await cli(...args);
+    const first = await cliIn(dir, ...args);
     expect(first.code).toBe(1);
     expect(first.stdout).toContain("Pass --prefer code\\|figma");
-    expect((await cli(...args, "--prefer", "code")).code).toBe(0);
-    expect((await cli(...args, "--prefer", "both")).code).toBe(2);
+    expect((await cliIn(dir, ...args, "--prefer", "code")).code).toBe(0);
+    expect((await cliIn(dir, ...args, "--prefer", "both")).code).toBe(2);
   });
 
   it("apply exits 2 on a stale plan", async () => {
     const dir = copyFixture(join(F, "..", "plan-fixtures", "prefer-figma"));
-    await cli("plan", "--figma", join(dir, "figma.json"), "--code", join(dir, "theme.css"), "--lock", join(dir, "tokens.lock.json"), "--prefer", "figma");
+    await cliIn(dir, "plan", "--figma", join(dir, "figma.json"), "--code", join(dir, "theme.css"), "--lock", join(dir, "tokens.lock.json"), "--prefer", "figma");
     writeFileSync(join(dir, "theme.css"), "@theme { --color-bg: red; }\n");
-    const r = await cli("apply", "--lock", join(dir, "tokens.lock.json"));
+    const r = await cliIn(dir, "apply", "--lock", join(dir, "tokens.lock.json"));
     expect(r.code).toBe(2);
     expect(r.stderr).toContain("re-run plan");
   });
@@ -132,7 +137,7 @@ describe("cli: config file and Figma bridge", () => {
   it("reads defaults from the config file, relative to its location", async () => {
     const dir = copyFixture(join(F, "conflict"));
     writeJson(join(dir, "token-parity.config.json"), { figma: "figma.json", code: "theme.css", lock: "tokens.lock.json", nearThreshold: 0.01 });
-    const r = await cli("check", "--config", join(dir, "token-parity.config.json"), "--format", "json");
+    const r = await cliIn(dir, "check", "--config", join(dir, "token-parity.config.json"), "--format", "json");
     expect(r.code).toBe(1);
     const report = JSON.parse(r.stdout);
     expect(report.findings[0].kind).toBe("conflict");
@@ -143,53 +148,53 @@ describe("cli: config file and Figma bridge", () => {
     const dir = copyFixture(join(F, "near-match"));
     writeJson(join(dir, "token-parity.config.json"), { figma: "figma.json", code: "theme.css", nearThreshold: 0.0001, colorMatch: "perceptual" });
     const config = join(dir, "token-parity.config.json");
-    expect((await cli("check", "--config", config)).code).toBe(1);
-    expect((await cli("check", "--config", config, "--near-threshold", "0.005")).code).toBe(0);
+    expect((await cliIn(dir, "check", "--config", config)).code).toBe(1);
+    expect((await cliIn(dir, "check", "--config", config, "--near-threshold", "0.005")).code).toBe(0);
   });
 
   it("rejects a malformed config", async () => {
     const dir = copyFixture(join(F, "near-match"));
     writeJson(join(dir, "c.json"), { modes: { dark: ".dark" } });
-    const r = await cli("check", "--config", join(dir, "c.json"));
+    const r = await cliIn(dir, "check", "--config", join(dir, "c.json"));
     expect(r.code).toBe(2);
     expect(r.stderr).toContain('"modes"');
   });
 
   it("figma-script export prints runnable code; verify-export checks the saved file", async () => {
     const dir = copyFixture(join(F, "near-match"));
-    const code = (await cli("figma-script", "export")).stdout;
+    const code = (await cliIn(dir, "figma-script", "export")).stdout;
     const result = (await runInFigma(code, mockFigma(readJsonFile(join(dir, "figma.json"))).figma)) as { export: unknown; checksum: string };
     const json = JSON.stringify(result.export);
 
     writeFileSync(join(dir, "export.json"), json); // any formatting verifies; verify-export stores it canonically
-    expect((await cli("verify-export", "--figma", join(dir, "export.json"), "--checksum", result.checksum)).code).toBe(0);
+    expect((await cliIn(dir, "verify-export", "--figma", join(dir, "export.json"), "--checksum", result.checksum)).code).toBe(0);
     expect(readFileSync(join(dir, "export.json"), "utf8")).toBe(`${JSON.stringify(result.export, null, 2)}\n`);
 
     // With the saved file, the generated script asks Figma for "unchanged" instead of the data.
-    const known = (await cli("figma-script", "export", "--figma", join(dir, "export.json"))).stdout;
+    const known = (await cliIn(dir, "figma-script", "export", "--figma", join(dir, "export.json"))).stdout;
     expect(await runInFigma(known, mockFigma(readJsonFile(join(dir, "figma.json"))).figma)).toMatchObject({ unchanged: true });
 
     const tampered = json.replace(/0\.22/, "0.23");
     expect(tampered).not.toBe(json);
     writeFileSync(join(dir, "export.json"), tampered);
-    const bad = await cli("verify-export", "--figma", join(dir, "export.json"), "--checksum", result.checksum);
+    const bad = await cliIn(dir, "verify-export", "--figma", join(dir, "export.json"), "--checksum", result.checksum);
     expect(bad.code).toBe(1);
     expect(bad.stdout).toContain("MISMATCH");
 
     writeFileSync(join(dir, "export.json"), json.slice(0, 100));
-    expect((await cli("verify-export", "--figma", join(dir, "export.json"), "--checksum", result.checksum)).stdout).toContain("not valid JSON");
+    expect((await cliIn(dir, "verify-export", "--figma", join(dir, "export.json"), "--checksum", result.checksum)).stdout).toContain("not valid JSON");
   });
 
   it("figma-script push finds the change set next to the lock", async () => {
     const dir = copyFixture(join(F, "..", "plan-fixtures", "prefer-code"));
     const inputs = ["--figma", join(dir, "figma.json"), "--code", join(dir, "theme.css"), "--lock", join(dir, "tokens.lock.json")];
-    expect((await cli("figma-script", "push", "--lock", join(dir, "tokens.lock.json"))).stderr).toContain("run apply first");
-    await cli("plan", ...inputs, "--prefer", "code");
-    await cli("apply", "--lock", join(dir, "tokens.lock.json"));
-    const r = await cli("figma-script", "push", "--lock", join(dir, "tokens.lock.json"));
+    expect((await cliIn(dir, "figma-script", "push", "--lock", join(dir, "tokens.lock.json"))).stderr).toContain("run apply first");
+    await cliIn(dir, "plan", ...inputs, "--prefer", "code");
+    await cliIn(dir, "apply", "--lock", join(dir, "tokens.lock.json"));
+    const r = await cliIn(dir, "figma-script", "push", "--lock", join(dir, "tokens.lock.json"));
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("return await tpPushChanges(figma, CHANGES,");
-    expect((await cli("figma-script", "nope")).code).toBe(2);
+    expect((await cliIn(dir, "figma-script", "nope")).code).toBe(2);
   });
 });
 
@@ -197,14 +202,14 @@ describe("cli: use_figma size limit", () => {
   it("refuses a push script over use_figma's code limit, with a way forward", async () => {
     const dir = copyFixture(join(F, "..", "plan-fixtures", "prefer-code"));
     const inputs = ["--figma", join(dir, "figma.json"), "--code", join(dir, "theme.css"), "--lock", join(dir, "tokens.lock.json")];
-    await cli("plan", ...inputs, "--prefer", "code");
-    await cli("apply", "--lock", join(dir, "tokens.lock.json"));
+    await cliIn(dir, "plan", ...inputs, "--prefer", "code");
+    await cliIn(dir, "apply", "--lock", join(dir, "tokens.lock.json"));
     const changesPath = join(dir, ".token-parity", "figma-changes.json");
     const changes = readJsonFile<FigmaChangeSet>(changesPath);
     const op = changes.operations[0]!;
     changes.operations = Array.from({ length: 400 }, () => op);
     writeJson(changesPath, changes);
-    const r = await cli("figma-script", "push", "--lock", join(dir, "tokens.lock.json"));
+    const r = await cliIn(dir, "figma-script", "push", "--lock", join(dir, "tokens.lock.json"));
     expect(r.code).toBe(2);
     expect(r.stderr).toMatch(/over use_figma's 50000 limit \(400 operations\).*skip/);
   });
@@ -215,5 +220,13 @@ describe("cli: help", () => {
     const help = (await cli("--help")).stdout;
     expect(help).toContain("./token-parity.config.json");
     expect(help).not.toContain("${");
+  });
+});
+
+describe("cli: input validation", () => {
+  it("rejects a malformed --checksum", async () => {
+    const r = await cli("verify-export", "--figma", join(F, "near-match", "figma.json"), "--checksum", "abc; rm -rf ~");
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain("14-character checksum");
   });
 });
