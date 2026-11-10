@@ -264,7 +264,8 @@ dependency or a private registry), not a local path.
   nothing similar, you're asked for a name. They also get their code syntax set (`var(--color-brand-secondary)`,
   or whatever style the file already uses), so developers see the right name in Dev Mode.
 - **Modes.** `@theme` values are the first mode of each Figma collection (usually Light). Overrides in
-  `.dark` (or your configured selectors) are the matching Figma mode.
+  `.dark` (or your configured selectors) are the matching Figma mode. Reports always call the base mode
+  `default`, whatever Figma names it; other modes keep their names (`dark`).
   A single-mode Figma collection (often Primitives) has no dark mode, so a dark override of one of
   its tokens in code is reported as exactly that, rather than as a value mismatch.
 - **Aliases vs values.** Aliases compare by the value they resolve to. Figma `{dark/fg-1}` and code

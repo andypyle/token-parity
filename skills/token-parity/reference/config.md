@@ -27,7 +27,9 @@ are relative to the config file, and command-line flags override it.
 
 - The default `modes` is `dark` ← `.dark`, `[data-theme="dark"]`, `@variant dark`. Code's `@theme`
   values are the first mode of each Figma collection (for example "Light").
-- Figma mode names are matched in lowercase kebab form: "Dark Mode" becomes `dark-mode`.
+- Figma mode names are matched in lowercase kebab form: "Dark Mode" becomes `dark-mode`. The base mode
+  (Figma's first mode, code's `@theme`) is always called `default`, in reports, the lock and `:mode`
+  ignore patterns.
 - `ignore` patterns match a token's CSS name (no `--`) or its Figma name (`dark/fg-1`); `*` is any run of
   characters. `name:mode` ignores only that mode. Ignored tokens are never reported, planned or written to
   the lock, but aliases to them still resolve.

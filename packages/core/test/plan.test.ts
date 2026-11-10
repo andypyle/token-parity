@@ -70,13 +70,15 @@ describe("plan", () => {
   it("adds Figma identity to the lock for already-synced tokens", async () => {
     const p = await planIn(join(ROOT, "fixtures", "round-trip-unchanged"));
     expect(p.lockAfter.tokens["color-bg"]!.figma).toEqual({ variableId: "V:3", name: "color/bg" });
-    expect(p.lockAfter.tokens["color-bg"]!.modes).toEqual(readJsonFile<LockFile>(join(ROOT, "fixtures", "round-trip-unchanged", "tokens.lock.json")).tokens["color-bg"]!.modes);
+    // The old lock keyed the base mode "light"; it's migrated to "default" with the same entry.
+    const old = readJsonFile<LockFile>(join(ROOT, "fixtures", "round-trip-unchanged", "tokens.lock.json")).tokens["color-bg"]!.modes;
+    expect(p.lockAfter.tokens["color-bg"]!.modes).toEqual({ default: old.light, dark: old.dark });
   });
 
   it("baselines in-sync tokens that have no lock entry", async () => {
     const p = await planIn(join(ROOT, "fixtures", "in-sync-no-lock"));
     expect(p.lockAfter.tokens["color-bg"]!.modes.dark).toEqual({ oklch: "oklch(0.21 0.006 285.9)", figmaRgb: { r: 0.093799, g: 0.093792, b: 0.105831, a: 1 } });
-    expect(p.lockAfter.tokens["color-accent"]!.modes.light).toEqual({ alias: "color-blue-500" });
+    expect(p.lockAfter.tokens["color-accent"]!.modes.default).toEqual({ alias: "color-blue-500" });
     expect(p.lockAfter.tokens["radius-md"]!.modes.default).toEqual({ value: "0.5rem" });
   });
 

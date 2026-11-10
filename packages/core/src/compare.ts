@@ -145,7 +145,7 @@ function missingOnOneSide(ctx: Ctx, kind: "missing-in-code" | "missing-in-figma"
   let changedHere: boolean | null = null;
   if (lock) {
     changedHere = token.modes.some((m) => {
-      const entry = lock.modes[m];
+      const entry = lockEntryFor(lock, modeLabel(token, m), m);
       return !entry || !lockMatches(ctx, side, token.values[m]!, entry);
     });
     direction = changedHere ? "needs-decision" : deleteOther;
@@ -162,7 +162,7 @@ function missingOnOneSide(ctx: Ctx, kind: "missing-in-code" | "missing-in-figma"
     type: token.type,
     figma: side === "figma" ? sideValue : null,
     code: side === "code" ? sideValue : null,
-    lock: lock?.modes[mode0] ?? null,
+    lock: lockEntryFor(lock, modeLabel(token, mode0), mode0),
     changed: side === "figma" ? { figma: changedHere, code: lock ? true : null } : { figma: lock ? true : null, code: changedHere },
     suggestedDirection: direction,
     message:
@@ -202,7 +202,7 @@ function compareToken(ctx: Ctx, f: NormalizedToken, c: NormalizedToken, lock: Lo
       ctx.ignored.modes++;
       continue;
     }
-    const lockEntry = lock?.modes[pair.mode] ?? null;
+    const lockEntry = lockEntryFor(lock, pair.mode, pair.figmaMode);
     if (pair.figma && pair.code) {
       if (brokenF.has(pair.figmaMode) || brokenC.has(pair.codeMode)) continue;
       comparePair(ctx, f, c, pair, lockEntry);
@@ -214,6 +214,19 @@ function compareToken(ctx: Ctx, f: NormalizedToken, c: NormalizedToken, lock: Lo
 
 // ---------------------------------------------------------------------------------------------
 // Mode pairing
+
+/**
+ * Report and lock label for a token's mode: the base mode is always "default" (code's @theme value), whatever
+ * Figma calls it ("Light", "Value"); other modes keep their names ("dark").
+ */
+export function modeLabel(token: NormalizedToken, mode: ModeName): ModeName {
+  return token.source.origin === "figma" && mode === token.modes[0] ? DEFAULT_MODE : mode;
+}
+
+/** The lock entry for a label, falling back to the Figma mode name that older locks used ("light"). */
+export function lockEntryFor(lock: LockToken | undefined, label: ModeName, figmaMode?: ModeName): LockModeEntry | null {
+  return lock?.modes[label] ?? (figmaMode ? lock?.modes[figmaMode] : undefined) ?? null;
+}
 
 export interface Pair {
   mode: ModeName; // label used in findings and lock lookups
@@ -244,7 +257,7 @@ export function pairModes(f: NormalizedToken, c: NormalizedToken): Pair[] {
     );
   }
   if (cSingle) {
-    return f.modes.map((m) => ({ mode: m, figmaMode: m, codeMode: DEFAULT_MODE, figma: f.values[m], code: c.values[DEFAULT_MODE] }));
+    return f.modes.map((m) => ({ mode: modeLabel(f, m), figmaMode: m, codeMode: DEFAULT_MODE, figma: f.values[m], code: c.values[DEFAULT_MODE] }));
   }
   const figmaDefault = f.modes[0]!;
   const codeName = (m: ModeName) => (m === DEFAULT_MODE ? figmaDefault : m);
@@ -252,7 +265,7 @@ export function pairModes(f: NormalizedToken, c: NormalizedToken): Pair[] {
   const labels = [...f.modes, ...c.modes.map(codeName).filter((m) => !f.modes.includes(m))];
   return labels.map((label) => {
     const codeMode = codeByName.get(label) ?? label;
-    return { mode: label, figmaMode: label, codeMode, figma: f.values[label], code: c.values[codeMode] };
+    return { mode: label === figmaDefault ? DEFAULT_MODE : label, figmaMode: label, codeMode, figma: f.values[label], code: c.values[codeMode] };
   });
 }
 
@@ -312,7 +325,7 @@ function brokenAliases(ctx: Ctx, set: TokenSet, token: NormalizedToken, side: "f
       {
         kind: "broken-alias",
         token: token.key,
-        mode,
+        mode: modeLabel(token, mode),
         type: token.type,
         figma: side === "figma" ? describe(token, value) : null,
         code: side === "code" ? describe(token, value) : null,
@@ -501,7 +514,7 @@ function compareColors(
  */
 export function runtimeCodeMode(f: NormalizedToken, pair: Pair): ModeName {
   const fMulti = !(f.modes.length === 1 && f.modes[0] === DEFAULT_MODE);
-  return fMulti && pair.codeMode === DEFAULT_MODE && pair.mode !== f.modes[0] ? pair.mode : pair.codeMode;
+  return fMulti && pair.codeMode === DEFAULT_MODE && pair.figmaMode !== f.modes[0] ? pair.mode : pair.codeMode;
 }
 
 /** True unless both values are literals, or both alias the same variable (which is equal by structure). */

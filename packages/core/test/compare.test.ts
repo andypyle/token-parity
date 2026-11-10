@@ -152,6 +152,15 @@ describe("modes", () => {
   });
 });
 
+describe("mode labels", () => {
+  it("labels the base mode \"default\" whatever Figma calls it", () => {
+    const vars = v("V:1", "color/bg", "VC:2", { "2:0": { r: 0, g: 0, b: 0, a: 1 }, "2:1": BLUE });
+    expect(kinds(run(vars, "@theme { --color-bg: oklch(0.62 0.19 259.8); }"))).toEqual(["value-mismatch:color-bg:default:needs-decision"]);
+    const broken = v("V:2", "color/fg", "VC:2", { "2:0": { type: "VARIABLE_ALIAS", id: "V:404" }, "2:1": BLUE });
+    expect(run(broken, "@theme { --color-fg: oklch(0.62 0.19 259.8); }").findings.map((f) => `${f.kind}:${f.mode}`)).toEqual(["broken-alias:default"]);
+  });
+});
+
 describe("types and aliases", () => {
   it("a type difference is one whole-token value-mismatch", () => {
     const r = run(v("V:1", "font/body", "VC:1", { "1:0": "Inter" }, "STRING"), "@theme { --font-body: oklch(0.5 0.1 100); }");

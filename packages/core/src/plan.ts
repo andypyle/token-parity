@@ -6,7 +6,7 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { loadInputs, parseJson } from "./check.js";
-import { compare, lockMatches, pairModes, resolvedOr, resolvesByValue, runtimeCodeMode, type Pair } from "./compare.js";
+import { compare, lockEntryFor, lockMatches, modeLabel, pairModes, resolvedOr, resolvesByValue, runtimeCodeMode, type Pair } from "./compare.js";
 import { InputError } from "./errors.js";
 import { detectCodeSyntaxStyle, formatCodeSyntax } from "./code-syntax.js";
 import { compileIgnore, type IgnoreMatcher } from "./ignore.js";
@@ -174,7 +174,7 @@ function collectBaseline(
   for (const pair of pairModes(f, c)) {
     if (busy.has(pair.mode) || busy.has(pair.figmaMode) || busy.has(pair.codeMode) || !pair.figma || !pair.code) continue;
     if (ignore.mode(f.key, pair.mode, f, c)) continue;
-    const existing = lockToken?.modes[pair.mode];
+    const existing = lockEntryFor(lockToken, pair.mode, pair.figmaMode);
     if (existing && lockMatches(lockCtx, "figma", pair.figma, existing) && lockMatches(lockCtx, "code", pair.code, existing)) continue;
     const entry = entryFromSides(...comparable(ctx, f, pair));
     if (!entry) continue;
@@ -212,7 +212,7 @@ function handleFinding(ctx: Ctx, finding: Finding, f: NormalizedToken | undefine
     case "format-mismatch":
     case "broken-alias": {
       const pairs = pairModes(f!, c!).filter((p) =>
-        finding.kind === "broken-alias" ? (finding.alias!.side === "figma" ? p.figmaMode : p.codeMode) === finding.mode : p.mode === finding.mode,
+        finding.kind === "broken-alias" ? (finding.alias!.side === "figma" ? modeLabel(f!, p.figmaMode) : p.codeMode) === finding.mode : p.mode === finding.mode,
       );
       if (finding.kind === "broken-alias" && finding.alias!.side === (dir === "figma-to-code" ? "figma" : "code")) {
         return unresolve(ctx, finding, "broken-alias");
@@ -269,9 +269,9 @@ function copyValue(ctx: Ctx, finding: Finding, f: NormalizedToken, c: Normalized
     if (c.source.code?.derivedFrom) return unresolve(ctx, finding, "computed-in-code", `${c.source.code.selector}, with --${c.source.code.derivedFrom}`);
     // A single-mode code token gets a mode override rather than having its shared default overwritten.
     let targetMode: ModeName;
-    if (cSingle && !fSingle && pair.mode !== f.modes[0]) targetMode = pair.mode; // new override block
+    if (cSingle && !fSingle && pair.figmaMode !== f.modes[0]) targetMode = pair.mode; // new override block
     else if (pair.code) targetMode = pair.codeMode; // existing declaration
-    else targetMode = pair.mode === f.modes[0] ? DEFAULT_MODE : pair.mode; // missing mode: insert
+    else targetMode = pair.figmaMode === f.modes[0] ? DEFAULT_MODE : pair.mode; // missing mode: insert
     const loc = c.source.code!.modes[targetMode];
     if (!loc && targetMode !== DEFAULT_MODE && !ctx.settings.modeMap[targetMode]) return unresolve(ctx, finding, "no-code-mode-selector");
 
@@ -353,7 +353,7 @@ function addCode(ctx: Ctx, finding: Finding, f: NormalizedToken, via: Via) {
     if (converted.ok && converted.note) notes.push(`${mode}: ${converted.note}`);
     if (!converted.ok) return unresolve(ctx, finding, f.values[mode]!.kind === "alias" ? "broken-alias" : "unsupported", converted.reason);
     values[codeMode === DEFAULT_MODE ? "theme" : `mode:${codeMode}`] = converted.value;
-    modes[mode] = converted.lock;
+    modes[i === 0 ? DEFAULT_MODE : mode] = converted.lock;
     if (/px$/.test(converted.value)) type = "dimension";
   }
   const prefix = ctx.code.tailwindPrefix;
@@ -383,7 +383,7 @@ function addFigma(ctx: Ctx, finding: Finding, c: NormalizedToken, via: Via) {
     const target = toFigma(ctx, cv, c.type);
     if (!target.ok) return unresolve(ctx, finding, "type-mismatch", target.reason);
     values[m.modeId] = target.value;
-    modes[m.name] = target.lock;
+    modes[i === 0 ? DEFAULT_MODE : m.name] = target.lock;
   }
 
   const scopes = pickScopes(ctx, c, collection, inferred?.sibling);
@@ -580,6 +580,15 @@ function buildLockAfter(ctx: Ctx, profile: LockFile["figmaColorProfile"], baseli
     const t = ensure(effect.token, effect.type);
     Object.assign(t.modes, effect.modes);
     if (effect.figmaName) t.figma = { name: effect.figmaName };
+  }
+  // Older locks keyed a multi-mode token's base mode by Figma's name ("light"); it's "default" now.
+  for (const [key, t] of Object.entries(tokens)) {
+    const f = ctx.figma.tokens.get(key);
+    const base = f && f.modes.length > 1 ? f.modes[0]! : null;
+    if (base && base !== DEFAULT_MODE && t.modes[base]) {
+      t.modes[DEFAULT_MODE] ??= t.modes[base]!;
+      delete t.modes[base];
+    }
   }
   // Figma identity for everything that exists in Figma, so later matching survives renames.
   for (const [key, t] of Object.entries(tokens)) {
