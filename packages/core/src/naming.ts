@@ -16,17 +16,24 @@ export interface InferredName {
  * Returns null when no variable shares a segment, so the caller can ask the user.
  */
 export function inferFigmaName(key: TokenKey, figma: TokenSet): InferredName | null {
-  const segs = key.split("-");
-  let best: { token: NormalizedToken; shared: number } | null = null;
+  let best: { token: NormalizedToken; shared: number; score: number; segs: string[] } | null = null;
 
   for (const token of [...figma.tokens.values()].sort((a, b) => (a.key < b.key ? -1 : 1))) {
     const name = token.source.figma?.name;
-    // Only siblings whose name follows the default rule tell us how key segments map to groups.
-    if (!name || token.key === key || figmaNameToKey(name) !== token.key) continue;
-    const shared = sharedPrefix(segs, token.key.split("-"));
-    if (shared > 0 && (!best || shared > best.shared)) best = { token, shared };
+    if (!name || token.key === key) continue;
+    // A sibling tells us how key segments map to name groups when its key is its name (by the default rule),
+    // or its name with a leading namespace dropped, as a codeSyntax match reveals: green/500 <-> color-green-500.
+    const nameKey = figmaNameToKey(name);
+    const lead = nameKey === token.key ? "" : token.key.endsWith(`-${nameKey}`) ? token.key.slice(0, token.key.length - nameKey.length) : null;
+    if (lead === null || !key.startsWith(lead)) continue;
+    const segs = key.slice(lead.length).split("-");
+    const shared = sharedPrefix(segs, nameKey.split("-"));
+    // Prefer the sibling that explains more of the key: its namespace plus the shared name segments.
+    const score = shared + (lead ? lead.split("-").filter(Boolean).length : 0);
+    if (shared > 0 && (!best || score > best.score)) best = { token, shared, score, segs };
   }
   if (!best) return null;
+  const segs = best.segs;
 
   const groups = best.token.source.figma!.name.split("/");
   const kept: string[] = [];

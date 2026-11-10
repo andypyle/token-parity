@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "colorProfile": "srgb",
+  "operations": [
+    { "op": "create-variable", "name": "on-fill", "collectionId": "C", "resolvedType": "COLOR", "scopes": ["ALL_FILLS", "STROKE_COLOR", "EFFECT_COLOR"], "codeSyntax": "var(--color-on-fill)" },
+    { "op": "set-value", "variableName": "on-fill", "modeId": "l", "value": { "type": "ALIAS", "variableId": "V3" } },
+    { "op": "set-value", "variableName": "on-fill", "modeId": "k", "value": { "type": "ALIAS", "variableId": "V3" } }
+  ]
+}

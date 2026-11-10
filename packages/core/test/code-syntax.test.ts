@@ -103,7 +103,8 @@ describe("matching by codeSyntax (Tailwind prefix fixture)", () => {
     const report = await runCheck(join(FIXTURES, "tailwind-prefix"));
     expect(report.diagnostics.filter((d) => d.level === "warning")).toEqual([]);
     const info = report.diagnostics.find((d) => d.level === "info" && d.message.includes("doesn't name a CSS token"));
-    expect(info?.message).toContain(`2 variables' codeSyntax.WEB doesn't name a CSS token (e.g. "spacing/1: calc(var(--ds-spacing) * 1)", "border/2: 2px")`);
+    // spacing/1's calc(var(--ds-spacing) * 1) is evaluated against code, so only border/2 really fell back.
+    expect(info?.message).toBe(`1 variable's codeSyntax.WEB doesn't name a CSS token (e.g. "border/2: 2px"); matched by name instead.`);
   });
 
   it("warns and falls back when a var name isn't in code", async () => {

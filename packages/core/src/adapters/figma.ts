@@ -3,6 +3,7 @@
 // plus a top-level `colorProfile` ("srgb" | "display-p3"). Colors stay RGB here; compare decides
 // whether to use the locked OKLCH or convert.
 import { codeSyntaxVarName, resolveCodeSyntax } from "../code-syntax.js";
+import { parseCalcMultiple } from "../derive.js";
 import { formatRgb } from "../color.js";
 import { InputError } from "../errors.js";
 import {
@@ -221,7 +222,10 @@ function variableKey(v: FigmaVariable, m: KeyMatching): string {
       message: `"${v.name}" codeSyntax.WEB "${web}" names --${r.tried[0]}, which isn't in code; matched by name (--${fallback}) instead.`,
     });
   } else if (r.problem === "not-a-name") {
-    m.notNames.push(`${v.name}: ${web}`);
+    // calc(var(--spacing) * n) is evaluated against code later (derive.ts); it didn't fall back.
+    const calc = parseCalcMultiple(web);
+    const base = calc && m.prefix && calc.name.startsWith(`${m.prefix}-`) ? calc.name.slice(m.prefix.length + 1) : calc?.name;
+    if (!(base && m.codeKeys.has(base))) m.notNames.push(`${v.name}: ${web}`);
   } else {
     m.unmatched.add(v.id);
     m.notNames.push(`${v.name}: ${web}`);
