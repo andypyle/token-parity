@@ -1,0 +1,8 @@
+/* Figma names don't follow the CSS names here; codeSyntax.WEB links them, in four different forms.
+   "Accent" has codeSyntax "bg-accent" but code has no matching token: reported, never guessed. */
+@theme {
+  --color-primary: oklch(0.62 0.19 259.8);
+  --spacing-4: 1rem;
+  --radius-md: 0.375rem;
+  --color-body: oklch(0.21 0.006 285.9);
+}

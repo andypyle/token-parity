@@ -138,3 +138,119 @@ for an unchanged one. For 300 variables in two modes, that means:
 | `check`, Figma unchanged | about 70k | about 1k |
 | `check`, Figma changed | about 70k | about 33k |
 | Sync | about 140k (two exports) | about 35k (one export plus the push script) |
+
+## Matching by codeSyntax
+
+A Figma variable's `codeSyntax.WEB` is the designer's own record of its name in code, so it is the
+strongest matching signal. Keys come from, in order: `codeSyntax.WEB`, then the lock's variable ID, then
+the name rule (`a/b/c` ↔ `--a-b-c`).
+
+- **Names come from an exact `var(--x)`** (with an optional fallback argument) or a bare `--x`, after
+  stripping the Tailwind prefix. The prefix comes from `@import "tailwindcss" prefix(ds)` or the
+  config's `prefix`. The name counts only if code has it. Otherwise there's a warning and the variable
+  falls back to its name. If it is then missing in code, `plan` adds it under the `var()` name, which
+  is the designer's choice.
+- **Identifier-shaped forms.** Tailwind utilities (the prefix maps to a namespace, and the variable's
+  type tells `text-` color from font size), Sass `$x`, Less `@x`, camelCase and dotted JS paths only
+  produce candidates. They match when exactly one exists in code. If none matches, `plan` asks
+  (`code-syntax-unmatched`) instead of guessing a CSS name.
+- **Anything else is not a name.** Expressions (`calc(var(--ds-spacing) * 4)`), literals (`2px`) and
+  arbitrary values (`bg-[#fff]`) fall back to the name, with one combined info note per check instead
+  of a warning each.
+- **Prefixed runtime names.** With a prefix, Tailwind emits `--ds-…`. Mode overrides written with that
+  name (`[data-theme="dark"] { --ds-color-surface: … }`) are overrides of `--color-surface`. New
+  overrides and new Figma code syntax are written with the prefix.
+- **Remaps.** A `codeSyntax` that resolves to a different key than the lock records is reported as info.
+  Two variables resolving to one key is an error.
+- **New variables.** Variables created from code get `codeSyntax.WEB` set in the file's majority direct
+  style (`var(--x)` by default). The export carries it as `code`, only when set, and the post-push
+  prediction includes it.
+
+## Real-project fixes (Tailwind `prefix(ds)`)
+
+- **`var()` references in CSS use the emitted names.** Tailwind doesn't rewrite them, so code writes
+  `--color-accent: var(--ds-color-green-500)`. A reference whose unprefixed name is a theme token reads as
+  that token, in `@theme` and in mode blocks alike. Prefixed names that aren't theme tokens are left as
+  written.
+- **Namespace resets** (`--color-*: initial`, `--*: initial`) aren't tokens.
+- **Alias against literal.** When exactly one side is an alias, both sides are compared by resolved value,
+  so `{dark/fg-1}` and `#e9edf0` are equal. Lock entries record the resolved Figma RGB. A side counts as
+  unchanged if either its alias or its resolved value matches the lock. A Figma alias copied to code
+  whose target isn't a CSS token is written as its resolved value, never as a dangling `var()`. Two
+  aliases still compare by target.
+- **Single-mode Figma vs code mode overrides.** A token in a single-mode Figma collection is compared on
+  its default only. Each extra code mode is `missing-mode` ("Code defines a dark value, but Figma
+  collection 'Primitives' has no dark mode"), which `plan` leaves for the user (`figma-mode-missing`).
+
+## Ignore list
+
+`ignore` (config, or `--ignore`) takes patterns matched against a token's CSS name or Figma variable name
+(`animate-*`, `dark/*`). `pattern:mode` ignores one mode only (`color-amber-*:dark`), for intentional
+code-only dark overrides of single-mode primitives. Ignored tokens and modes aren't compared, planned or
+written to the lock (existing lock entries are kept as they are). They stay in the token sets, so aliases
+to them still resolve. A check reports how many were ignored, as info.
+
+## Color format in code
+
+Colors are always compared in OKLCH. `colorFormat` only decides what `apply` writes into CSS:
+- **`"preserve"` (default).** A replaced value keeps its format and style: hex case, and legacy
+  `rgba(r, g, b, a)` vs modern `rgb(r g b / a)`. New tokens use the file's majority format; ties go to
+  oklch, then hex.
+- **`"oklch"`, `"hex"`, `"rgb"`.** Always that format.
+
+Hex and `rgb()` hold only sRGB. A Display P3 color inside sRGB is converted. One outside sRGB is written
+as `oklch()`, with a note on the plan action. The lock keeps OKLCH whatever is written: the text itself
+for `oklch()`, or a lossless OKLCH rendering of hex/rgb. So 8-bit rounding never shows up as drift. The
+"not oklch()" warning only appears under `"oklch"`.
+
+## Exact color matching (default)
+
+The requirement: colors need 1:1 parity with Figma. If Figma shows `#0000FF`, that is the value to find in
+code.
+
+- **`colorMatch: "exact"` (default).** Both sides are reduced to 8-bit sRGB bytes (r, g, b, alpha), the
+  way Figma shows them, and must be identical. There is no tolerance and no near-match. Lock change
+  detection uses the same bytes.
+- **Notation.** A matching color written in a form you can't search for (`oklch()`, `hsl()`, named) is a
+  `format-mismatch` error, suggested Figma to code. `plan` rewrites it as hex or `rgb()`: "preserve" keeps
+  hex vs rgb() per value, and replaces oklch with the file's majority of hex/rgb, defaulting to hex.
+- **Writing to Figma.** Code's bytes are written as k/255, so Figma displays exactly the code's hex.
+- **Display P3 files** fall back to perceptual matching with a warning: Figma's hex there is P3, which CSS
+  hex can't express.
+- **`colorFormat: "oklch"`** with exact matching is refused as a configuration error.
+- **`colorMatch: "perceptual"`** is the earlier behavior (OKLCH ΔE, near-matches, `oklch()` allowed). The
+  original fixtures in `test/fixtures` and `test/plan-fixtures` describe this mode and run with it
+  explicitly. Exact-mode fixtures live in `test/exact-fixtures`.
+
+## Aliases to different variables; computed values (Real-project round 3)
+
+- **Aliases.** Values compare by what they resolve to unless both sides alias the same variable, which is
+  equal by structure. Figma `{gray/900}` vs code `var(--color-on-fill)` → `var(--color-gray-900)` is in sync
+  when both reach the same color. Retargeting an alias to an equal-valued variable is not a value change.
+- **Code aliases resolve in the runtime mode.** A single `@theme` value `var(--color-green-100)` resolves to
+  the `.dark` override of `--color-green-100` when the dark pair is compared, as the browser would.
+- **Computed values.** A Figma variable whose codeSyntax is `calc(var(--x) * n)` (or `n * var(--x)`) gets a
+  read-only computed code value, n × `--x` (prefix stripped), when code declares `--x` but not the token.
+  It compares normally. Figma → code fixes are unresolved (`computed-in-code`); code → Figma works. A check
+  reports the count as info.
+
+## Real-project round 4: scales + semantics
+
+- **Naming through codeSyntax siblings.** A sibling matched by codeSyntax shows how keys map to names
+  (`green/500` ↔ `color-green-500`: drop `color-`), so `color-green-900` becomes `green/900` in the sibling's
+  collection, with its scopes and codeSyntax.
+- **`color-mix()`** is evaluated per mode (premultiplied alpha, normalized percentages, oklch hue methods),
+  with `var()` operands resolved in that mode. Unsupported forms warn and aren't compared. It's exempt from the
+  exact format check, and `plan` won't overwrite it (`computed-in-code`).
+- **`alias-mismatch`.** When both sides alias different variables with the same value, that's a finding
+  instead of silence. The direction comes from the lock's per-side aliases; without them it's a first-sync
+  decision (`--prefer` applies). `plan` re-aliases, creating targets first and resolving pending aliases by
+  name.
+- **Alias validity.** Before proposing a Figma alias, `plan` checks that it resolves to code's value in that
+  mode: directly for existing targets, and after planning for created ones. If not, it writes the value, with
+  a note.
+- **Lock shape.** New entries always store the resolved value (`oklch` + `figmaRgb`, or `value`) plus
+  `figmaAlias` / `codeAlias` for sides that alias. The older `{ alias }` form is still read, as "both sides
+  aliased this".
+- **Info notes.** A `calc()` codeSyntax that is evaluated against code is no longer also listed under
+  "doesn't name a CSS token".

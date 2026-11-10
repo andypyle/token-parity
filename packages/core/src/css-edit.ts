@@ -29,11 +29,13 @@ export function editCss(css: string, file: string, actions: CodeAction[], modeMa
         existing.value = action.to;
       }
     } else if (action.op === "add-code") {
-      for (const [context, value] of Object.entries(action.values)) insert(root, action.cssVar, context, value, modeMap, index);
+      for (const [context, value] of Object.entries(action.values)) {
+        insert(root, context === "theme" ? action.cssVar : (action.modeCssVar ?? action.cssVar), context, value, modeMap, index);
+      }
     } else {
       for (const [key, decl] of index) {
         const [prop, context] = key.split("|") as [string, string];
-        if (prop === action.cssVar && (context === "theme" || context.startsWith("mode:"))) {
+        if ((prop === action.cssVar || prop === action.modeCssVar) && (context === "theme" || context.startsWith("mode:"))) {
           decl.remove();
           index.delete(key);
         }

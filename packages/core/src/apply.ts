@@ -108,7 +108,7 @@ function figmaOperations(actions: Action[]): FigmaOperation[] {
   const deletes: FigmaOperation[] = [];
   for (const a of actions) {
     if (a.op === "add-figma") {
-      creates.push({ op: "create-variable", name: a.name, collectionId: a.collectionId, resolvedType: resolvedTypeOf(a.type), scopes: a.scopes });
+      creates.push({ op: "create-variable", name: a.name, collectionId: a.collectionId, resolvedType: resolvedTypeOf(a.type), scopes: a.scopes, codeSyntax: a.codeSyntax });
       for (const [modeId, value] of Object.entries(a.values)) sets.push({ op: "set-value", variableName: a.name, modeId, value });
     } else if (a.op === "update-figma") {
       updates.push({ op: "set-value", variableId: a.variableId, modeId: a.modeId, value: a.to });

@@ -13,6 +13,7 @@ interface CompactVariable {
   name: string;
   type: string;
   scopes: string[];
+  code?: string;
   values: CompactValue[];
 }
 interface CompactCollection {
@@ -77,11 +78,13 @@ export function predictExport(before: CompactExport, changes: FigmaChangeSet, pu
       if (created.name !== op.name) throw new InputError(`push created "${created.name}" where "${op.name}" was expected`);
       const collection = collectionById.get(op.collectionId);
       if (!collection) throw new InputError(`collection ${op.collectionId} is not in the export`);
+      // Same key order as the plugin's export: code (codeSyntax.WEB) sits between scopes and values.
       const variable: CompactVariable = {
         id: shortId(V, created.id),
         name: op.name,
         type: op.resolvedType,
         scopes: [...op.scopes].sort(),
+        ...(op.codeSyntax ? { code: op.codeSyntax } : {}),
         values: collection.modes.map(() => null),
       };
       collection.variables.push(variable);

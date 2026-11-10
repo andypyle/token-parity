@@ -62,6 +62,12 @@ export interface TokenSource {
     modeIds: Record<ModeName, string>;
     /** Variable scopes, when the export includes them. */
     scopes?: string[];
+    /** codeSyntax.WEB, when set. */
+    codeSyntax?: string;
+    /** codeSyntax.WEB is identifier-shaped but matched no token in code; the key fell back to the name rule. */
+    codeSyntaxUnmatched?: boolean;
+    /** The CSS token an exact `var(--x)` codeSyntax names (prefix stripped), whether or not code has it. */
+    codeSyntaxVar?: string;
   };
   code?: {
     cssVar: string;
@@ -70,6 +76,8 @@ export interface TokenSource {
     selector: string;
     /** Per-mode declaration site (differs from cssVar for pass-through variables). */
     modes: Record<ModeName, CodeLocation>;
+    /** Set for values code computes (`calc(var(--spacing) * 4)`): the variable they derive from. Not editable. */
+    derivedFrom?: string;
   };
 }
 
@@ -97,6 +105,8 @@ export interface FigmaCollectionInfo {
 
 export interface TokenSet {
   origin: "figma" | "code";
+  /** Code only: Tailwind's prefix (`prefix(ds)` -> "ds"); runtime variables are `--ds-…`. */
+  tailwindPrefix?: string;
   colorProfile?: ColorProfile;
   figmaCollections?: FigmaCollectionInfo[];
   modes: ModeName[];
@@ -106,9 +116,19 @@ export interface TokenSet {
 
 // ---------- Lock file ----------
 
+/** Which variable each side aliased when the entry was written; absent for a side that held a literal. */
+export interface LockAliases {
+  figmaAlias?: TokenKey;
+  codeAlias?: TokenKey;
+}
+
+/**
+ * A synced value: always the resolved value (OKLCH + the RGB in Figma, or a scalar), plus each side's alias.
+ * `{ alias }` is the older form, meaning both sides aliased that token; it is still read.
+ */
 export type LockModeEntry =
-  | { oklch: string; figmaRgb: Rgba }
-  | { value: string }
+  | ({ oklch: string; figmaRgb: Rgba } & LockAliases)
+  | ({ value: string } & LockAliases)
   | { alias: TokenKey };
 
 export interface LockToken {
@@ -137,6 +157,20 @@ export interface CompareSettings {
   remBase: number;
   /** Mode name -> CSS selectors (or "@variant <name>") that hold that mode's overrides. */
   modeMap: Record<ModeName, string[]>;
+  /** Tailwind prefix, when the `@import "tailwindcss" prefix(…)` isn't in the code file. */
+  prefix?: string;
+  /** Tokens to leave alone, by CSS or Figma name (`animate-*`, `dark/*`), optionally one mode (`color-amber-*:dark`). */
+  ignore?: string[];
+  /**
+   * How apply writes colors into CSS. "preserve" keeps the format of the value being replaced, and new tokens
+   * use the file's majority format. Comparison is always in OKLCH whatever the format.
+   */
+  colorFormat?: "preserve" | "oklch" | "hex" | "rgb";
+  /**
+   * "exact" (default): colors must be the same 8-bit sRGB value Figma shows, written in code as hex or rgb() so a
+   * search for Figma's value finds it. "perceptual": colors compare by OKLCH distance; rounding is a near-match.
+   */
+  colorMatch?: "exact" | "perceptual";
 }
 
 export const DEFAULT_SETTINGS: CompareSettings = {
@@ -145,6 +179,8 @@ export const DEFAULT_SETTINGS: CompareSettings = {
   precision: { l: 4, c: 4, h: 2 },
   remBase: 16,
   modeMap: { dark: [".dark", '[data-theme="dark"]', "@variant dark"] },
+  colorFormat: "preserve",
+  colorMatch: "exact",
 };
 
 // ---------- Report ----------
@@ -157,7 +193,9 @@ export type FindingKind =
   | "broken-alias"
   | "missing-mode"
   | "conflict"
-  | "out-of-gamut";
+  | "out-of-gamut"
+  | "format-mismatch"
+  | "alias-mismatch";
 
 export const FINDING_KINDS: readonly FindingKind[] = [
   "missing-in-code",
@@ -168,6 +206,8 @@ export const FINDING_KINDS: readonly FindingKind[] = [
   "missing-mode",
   "conflict",
   "out-of-gamut",
+  "format-mismatch",
+  "alias-mismatch",
 ];
 
 export type Severity = "error" | "warning" | "info";
@@ -237,6 +277,8 @@ export type FigmaValue =
 
 export interface ActionBase {
   id: string;
+  /** Anything about this action the user should know, e.g. a color written as oklch() because it is outside sRGB. */
+  note?: string;
   token: TokenKey;
   mode: ModeName | null;
   finding: string | null;
@@ -247,8 +289,8 @@ export interface ActionBase {
 export type Action = ActionBase &
   (
     | { op: "update-code"; cssVar: string; context: string; from: string | null; to: string }
-    | { op: "add-code"; cssVar: string; values: Record<string, string> } // keyed by context
-    | { op: "delete-code"; cssVar: string; destructive: true }
+    | { op: "add-code"; cssVar: string; values: Record<string, string>; modeCssVar?: string } // values keyed by context; modeCssVar: the (prefixed) name for mode blocks
+    | { op: "delete-code"; cssVar: string; modeCssVar?: string; destructive: true }
     | { op: "update-figma"; variableId: string; modeId: string; from: FigmaValue | null; to: FigmaValue }
     | {
         op: "add-figma";
@@ -260,6 +302,8 @@ export type Action = ActionBase &
         naming: { source: "explicit" | "inferred"; sibling?: string };
         scopes: string[];
         scopesFrom: "sibling" | "collection" | "namespace" | "none";
+        /** codeSyntax.WEB for the new variable, in the file's style, so it links to its CSS name explicitly. */
+        codeSyntax: string;
       }
     | { op: "delete-figma"; variableId: string; destructive: true }
     | { op: "lock-only" }
@@ -275,6 +319,8 @@ export type UnresolvedReason =
   | "figma-mode-missing"
   | "no-code-mode-selector"
   | "depends-on-unresolved"
+  | "code-syntax-unmatched"
+  | "computed-in-code"
   | "unsupported";
 
 export interface Unresolved {
@@ -306,7 +352,7 @@ export interface Plan {
 // ---------- Figma change set: the contract with the skill ----------
 
 export type FigmaOperation =
-  | { op: "create-variable"; name: string; collectionId: string; resolvedType: "COLOR" | "FLOAT" | "STRING" | "BOOLEAN"; scopes: string[] }
+  | { op: "create-variable"; name: string; collectionId: string; resolvedType: "COLOR" | "FLOAT" | "STRING" | "BOOLEAN"; scopes: string[]; codeSyntax?: string }
   | ({ op: "set-value"; modeId: string; value: FigmaValue } & ({ variableId: string } | { variableName: string }))
   | { op: "delete-variable"; variableId: string };
 

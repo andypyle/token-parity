@@ -6,6 +6,7 @@ import { expandCompactExport, readFigmaExport } from "./adapters/figma.js";
 import { readTailwindCss } from "./adapters/tailwind.js";
 import { keysByVariableId, parseJson, readText } from "./check.js";
 import { compare } from "./compare.js";
+import { deriveComputedTokens } from "./derive.js";
 import { InputError } from "./errors.js";
 import { parseLock } from "./lock.js";
 import { pendingPath, sha256, toJson, type Pending } from "./state.js";
@@ -52,8 +53,9 @@ export async function commitPending(plan: Plan, freshFigmaPath: string): Promise
   }
 
   const settings = plan.settings;
-  const figma = readFigmaExport(freshJson, freshFigmaPath, keysByVariableId(lock));
-  const code = readTailwindCss(css, plan.inputs.code.path, settings.modeMap);
+  const code = readTailwindCss(css, plan.inputs.code.path, settings.modeMap, settings.prefix ?? null, settings.colorFormat === "oklch");
+  const figma = readFigmaExport(freshJson, freshFigmaPath, keysByVariableId(lock), new Set(code.tokens.keys()), code.tailwindPrefix ?? null);
+  deriveComputedTokens(figma, code);
   const { findings } = compare({ figma, code, lock, settings });
   const touched = new Set(pending.touched);
   const problems = findings.filter((f) => touched.has(f.token) && f.severity !== "warning");

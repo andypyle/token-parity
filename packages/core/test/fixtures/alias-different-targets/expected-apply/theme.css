@@ -1,0 +1,15 @@
+/* Both sides alias, but to different variables that resolve to the same color (real project):
+   - accent-soft dark: Figma {dark/green-100} (#253222); code var(--color-green-100), overridden in .dark to #253222
+   - on-control: Figma {gray/900}; code var(--color-on-fill) -> var(--color-gray-900); both #1a1f24 */
+@theme {
+  --color-green-100: #e8f0e6;
+  --color-gray-900: #1a1f24;
+  --color-on-fill: var(--color-gray-900);
+  --color-on-control: var(--color-on-fill);
+  --color-accent-soft: var(--color-green-100);
+  --dark-green-100: #253222;
+}
+
+.dark {
+  --color-green-100: #253222;
+}

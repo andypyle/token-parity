@@ -15,34 +15,117 @@ export function figmaRgbOf(v: TokenValue): Rgba | null {
   return { r: v.color.r, g: v.color.g, b: v.color.b, a: v.color.alpha };
 }
 
-/** Lock entry describing two sides that agree (code text + Figma's current RGB). */
-export function entryFromSides(figma: TokenValue, code: TokenValue): LockModeEntry | null {
-  if (code.kind === "alias") return { alias: code.ref };
+/**
+ * Lock entry for two sides that agree: the resolved value (code's text, Figma's current RGB) plus which variable
+ * each side aliased, so a later re-alias on either side can be told apart from a value change.
+ */
+export function entryFromSides(figma: TokenValue, code: TokenValue, figmaOrig: TokenValue = figma, codeOrig: TokenValue = code): LockModeEntry | null {
+  const aliases = {
+    ...(figmaOrig.kind === "alias" ? { figmaAlias: figmaOrig.ref } : {}),
+    ...(codeOrig.kind === "alias" ? { codeAlias: codeOrig.ref } : {}),
+  };
+  if (code.kind === "alias") return { alias: code.ref }; // unresolvable: keep the reference
   if (code.kind === "color") {
     const rgb = figmaRgbOf(figma);
-    return rgb ? { oklch: lockOklchText(code), figmaRgb: rgb } : null;
+    return rgb ? { oklch: lockOklchText(code), figmaRgb: rgb, ...aliases } : null;
   }
-  return { value: code.raw };
+  return { value: code.raw, ...aliases };
 }
 
 const NUM = (n: number) => String(Math.round(n * 1e4) / 1e4);
 const DIMENSION_NAMESPACES = /^(spacing|radius|text|breakpoint|container|blur|inset)-/;
 
-export type Converted<T> = { ok: true; value: T; lock: LockModeEntry } | { ok: false; reason: string };
+export type Converted<T> = { ok: true; value: T; lock: LockModeEntry; note?: string } | { ok: false; reason: string };
+
+export type ColorFormat = "preserve" | "oklch" | "hex" | "rgb";
+type Written = "oklch" | "hex" | "rgb";
+
+/** The format a CSS color value is written in, or null for anything else (hsl, named colors, …). */
+export function cssColorFormat(raw: string): Written | null {
+  const t = raw.trim();
+  if (/^oklch\(/i.test(t)) return "oklch";
+  if (/^#[0-9a-f]{3,8}$/i.test(t)) return "hex";
+  if (/^rgba?\(/i.test(t)) return "rgb";
+  return null;
+}
+
+/**
+ * The format a file mostly uses for its colors. Ties go to oklch, then hex, then rgb. With `exact`, only hex
+ * and rgb() count (oklch can't show Figma's value), and the default is hex.
+ */
+export function majorityColorFormat(raws: Iterable<string>, exact = false): Written {
+  const counts: Record<Written, number> = { oklch: 0, hex: 0, rgb: 0 };
+  for (const raw of raws) {
+    const f = cssColorFormat(raw);
+    if (f && !(exact && f === "oklch")) counts[f]++;
+  }
+  const order: Written[] = exact ? ["hex", "rgb"] : ["oklch", "hex", "rgb"];
+  return order.reduce((best, f) => (counts[f] > counts[best] ? f : best), order[0]!);
+}
+
+const byte = color.toByte;
+const hex2 = (n: number) => n.toString(16).padStart(2, "0");
+const alphaText = (a: number) => String(Math.round(a * 1000) / 1000);
+
+/**
+ * Write a Figma color as CSS in the requested format. `like` (the value being replaced) decides the style
+ * details: hex case, and legacy `rgba(r, g, b, a)` vs modern `rgb(r g b / a)`. Hex and rgb() can only hold
+ * sRGB, so a color outside sRGB is written as oklch() with a note.
+ */
+export function writeCssColor(
+  rgb: { space: "srgb" | "display-p3"; r: number; g: number; b: number; alpha: number },
+  format: Written,
+  settings: Pick<CompareSettings, "precision">,
+  like?: string,
+): { text: string; note?: string } {
+  const oklchText = () => color.formatOklch(color.rgbToOklch(rgb, settings.precision), settings.precision, "0");
+  if (format === "oklch") return { text: oklchText() };
+
+  const srgb = rgb.space === "srgb" ? rgb : color.toSrgb(rgb);
+  if (!srgb) return { text: oklchText(), note: `outside sRGB, so written as oklch() instead of ${format}` };
+  const [r, g, b] = [byte(srgb.r), byte(srgb.g), byte(srgb.b)];
+
+  if (format === "hex") {
+    const text = `#${hex2(r)}${hex2(g)}${hex2(b)}${srgb.alpha < 1 ? hex2(byte(srgb.alpha)) : ""}`;
+    return { text: like && /^#[0-9A-F]+$/.test(like.trim()) && /[A-F]/.test(like) ? text.toUpperCase() : text };
+  }
+  const legacy = like ? /^rgba?\([^)]*,/i.test(like.trim()) : false;
+  if (legacy) return { text: srgb.alpha < 1 ? `rgba(${r}, ${g}, ${b}, ${alphaText(srgb.alpha)})` : `rgb(${r}, ${g}, ${b})` };
+  return { text: srgb.alpha < 1 ? `rgb(${r} ${g} ${b} / ${alphaText(srgb.alpha)})` : `rgb(${r} ${g} ${b})` };
+}
 
 /**
  * Figma value -> CSS text. `like` is the existing code value at the target, if any, whose unit is kept.
  */
-export function codeTextFromFigma(fv: TokenValue, key: string, like: TokenValue | undefined, settings: CompareSettings): Converted<string> {
+/**
+ * @param fileFormat the format the code file mostly uses, for `colorFormat: "preserve"` when nothing is replaced.
+ */
+export function codeTextFromFigma(
+  fv: TokenValue,
+  key: string,
+  like: TokenValue | undefined,
+  settings: CompareSettings,
+  fileFormat: Written = "oklch",
+  /** How to write a reference to another token, e.g. var(--ds-color-x) in a prefixed Tailwind project. */
+  varRef: (key: string) => string = (key) => `var(--${key})`,
+): Converted<string> {
   switch (fv.kind) {
     case "alias":
       if (fv.ref.startsWith("figma-variable:")) return { ok: false, reason: "alias target is not in the Figma export" };
-      return { ok: true, value: `var(--${fv.ref})`, lock: { alias: fv.ref } };
+      return { ok: true, value: varRef(fv.ref), lock: { alias: fv.ref } };
     case "color": {
       const rgb = figmaRgbOf(fv);
-      const oklch = fv.color.space === "oklch" ? fv.color : color.rgbToOklch(fv.color, settings.precision);
-      const text = color.formatOklch(oklch, settings.precision, "0");
-      return rgb ? { ok: true, value: text, lock: { oklch: text, figmaRgb: rgb } } : { ok: false, reason: "not an RGB color" };
+      if (!rgb || fv.color.space === "oklch") return { ok: false, reason: "not an RGB color" };
+      const wanted = settings.colorFormat ?? "preserve";
+      const exact = settings.colorMatch !== "perceptual";
+      const likeFormat = like?.kind === "color" ? cssColorFormat(like.raw) : null;
+      const kept = likeFormat && !(exact && likeFormat === "oklch") ? likeFormat : null;
+      const format: Written = wanted === "preserve" ? (kept ?? fileFormat) : wanted;
+      const written = writeCssColor(fv.color, format, settings, like?.kind === "color" ? like.raw : undefined);
+      // The lock keeps OKLCH: the written text when it is oklch(), otherwise a lossless rendering of it.
+      const parsed = color.parseCssColor(written.text)!;
+      const lockText = parsed.wasOklch ? written.text : color.formatOklch(parsed.color, { l: 8, c: 8, h: 6 });
+      return { ok: true, value: written.text, lock: { oklch: lockText, figmaRgb: rgb }, ...(written.note ? { note: written.note } : {}) };
     }
     case "number": {
       let text: string;
@@ -70,6 +153,12 @@ export function figmaValueFromCode(
   if (cv.kind === "color") {
     if (figmaType !== "color") return { ok: false, reason: `Figma variable is ${figmaType}` };
     const c = cv.color.space === "oklch" ? cv.color : color.rgbaToOklch({ r: cv.color.r, g: cv.color.g, b: cv.color.b, a: cv.color.alpha }, cv.color.space);
+    // Exact matching: write the code's 8-bit value as k/255, so Figma shows exactly the hex that's in code.
+    const bytes = settings.colorMatch !== "perceptual" && profile === "srgb" ? color.srgbBytes(cv.color) : null;
+    if (bytes) {
+      const exactRgb = { r: bytes[0] / 255, g: bytes[1] / 255, b: bytes[2] / 255, a: bytes[3] / 255 };
+      return { ok: true, value: { type: "COLOR", ...exactRgb }, lock: { oklch: lockOklchText(cv), figmaRgb: exactRgb } };
+    }
     const rgb = color.toGamutRgb(c, profile);
     return { ok: true, value: { type: "COLOR", ...rgb }, lock: { oklch: lockOklchText(cv), figmaRgb: rgb } };
   }

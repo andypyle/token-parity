@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { readFigmaExport } from "./adapters/figma.js";
 import { readTailwindCss } from "./adapters/tailwind.js";
 import { compare } from "./compare.js";
+import { deriveComputedTokens } from "./derive.js";
 import { InputError } from "./errors.js";
 import { parseLock } from "./lock.js";
 import { DEFAULT_SETTINGS, FINDING_KINDS, type CompareSettings, type Diagnostic, type FindingKind, type LockFile, type Report, type TokenSet } from "./types.js";
@@ -31,6 +32,9 @@ export interface LoadedInputs {
 /** Read and normalize all inputs. Shared by check, plan and commit so they always match tokens the same way. */
 export async function loadInputs(options: CheckOptions): Promise<LoadedInputs> {
   const settings: CompareSettings = { ...DEFAULT_SETTINGS, ...options.settings };
+  if (settings.colorMatch !== "perceptual" && settings.colorFormat === "oklch") {
+    throw new InputError('colorFormat "oklch" can\'t give exact matches with Figma; use "hex", "rgb" or "preserve", or set colorMatch to "perceptual".');
+  }
   const diagnostics: Diagnostic[] = [];
 
   // A lock path that does not exist yet is the normal first run: compare without a baseline.
@@ -47,9 +51,10 @@ export async function loadInputs(options: CheckOptions): Promise<LoadedInputs> {
   ]);
 
   const lock: LockFile | null = lockPath && lockText !== null ? parseLock(parseJson(lockText, lockPath), lockPath) : null;
-  const figma = readFigmaExport(parseJson(figmaText, options.figmaPath), options.figmaPath, keysByVariableId(lock));
-  const code = readTailwindCss(codeText, options.codePath, settings.modeMap);
+  const code = readTailwindCss(codeText, options.codePath, settings.modeMap, settings.prefix ?? null, settings.colorFormat === "oklch");
+  const figma = readFigmaExport(parseJson(figmaText, options.figmaPath), options.figmaPath, keysByVariableId(lock), new Set(code.tokens.keys()), code.tailwindPrefix ?? null);
   diagnostics.push(...renameDiagnostics(figma, lock));
+  diagnostics.push(...deriveComputedTokens(figma, code));
 
   return { settings, figma, code, lock, lockPath, text: { figma: figmaText, code: codeText, lock: lockText }, diagnostics };
 }

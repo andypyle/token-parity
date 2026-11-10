@@ -14,7 +14,7 @@ function describeAction(a: Action): string {
     case "update-figma":
       return `set ${a.variableId} mode ${a.modeId} to ${code(JSON.stringify(a.to))}`;
     case "add-figma":
-      return `create ${code(a.name)} in ${a.collectionName} (scopes: ${a.scopes.length > 0 ? a.scopes.join(", ") : "none"}; ${a.naming.source === "explicit" ? "name from resolutions" : `named like ${code(a.naming.sibling ?? "")}`})`;
+      return `create ${code(a.name)} in ${a.collectionName} (code: ${code(a.codeSyntax)}; scopes: ${a.scopes.length > 0 ? a.scopes.join(", ") : "none"}; ${a.naming.source === "explicit" ? "name from resolutions" : `named like ${code(a.naming.sibling ?? "")}`})`;
     case "delete-figma":
       return `delete variable ${a.variableId}`;
     case "lock-only":
@@ -42,7 +42,9 @@ export function renderPlanMarkdown(plan: Plan): string {
   );
   if (plan.actions.length > 0) {
     lines.push("## Actions", "", "| Token | Mode | Changes | Why | What |", "| --- | --- | --- | --- | --- |");
-    for (const a of plan.actions) lines.push(`| ${code(a.token)} | ${a.mode ?? "all"} | ${SIDE[a.op]} | ${a.via} | ${cell(describeAction(a))} |`);
+    for (const a of plan.actions) {
+      lines.push(`| ${code(a.token)} | ${a.mode ?? "all"} | ${SIDE[a.op]} | ${a.via} | ${cell(describeAction(a) + (a.note ? ` (note: ${a.note})` : ""))} |`);
+    }
     lines.push("");
   }
   if (plan.unresolved.length > 0) {

@@ -1,0 +1,17 @@
+{
+  "colorProfile": "srgb",
+  "variableCollections": {
+    "P": { "id": "P", "name": "Primitives", "modes": [{ "modeId": "p", "name": "Value" }], "defaultModeId": "p" },
+    "C": { "id": "C", "name": "Color", "modes": [{ "modeId": "l", "name": "Light" }, { "modeId": "k", "name": "Dark" }], "defaultModeId": "l" }
+  },
+  "variables": {
+    "V1": { "id": "V1", "name": "green/100", "resolvedType": "COLOR", "variableCollectionId": "P", "scopes": ["ALL_FILLS", "STROKE_COLOR"], "codeSyntax": { "WEB": "var(--ds-color-green-100)" },
+            "valuesByMode": { "p": { "r": 0.9098039215686274, "g": 0.9411764705882353, "b": 0.9019607843137255, "a": 1 } } },
+    "V2": { "id": "V2", "name": "gray/900", "resolvedType": "COLOR", "variableCollectionId": "P", "scopes": ["ALL_FILLS", "STROKE_COLOR"], "codeSyntax": { "WEB": "var(--ds-color-gray-900)" },
+            "valuesByMode": { "p": { "r": 0.10196078431372549, "g": 0.12156862745098039, "b": 0.1411764705882353, "a": 1 } } },
+    "V3": { "id": "V3", "name": "dark/page", "resolvedType": "COLOR", "variableCollectionId": "P",
+            "valuesByMode": { "p": { "r": 0.0784313725490196, "g": 0.09411764705882353, "b": 0.10980392156862745, "a": 1 } } },
+    "V4": { "id": "V4", "name": "page", "resolvedType": "COLOR", "variableCollectionId": "C", "codeSyntax": { "WEB": "var(--ds-color-page)" },
+            "valuesByMode": { "l": { "type": "VARIABLE_ALIAS", "id": "V1" }, "k": { "type": "VARIABLE_ALIAS", "id": "V3" } } }
+  }
+}

@@ -1,0 +1,2 @@
+{ "exitCode": 1, "actions": [],
+  "unresolved": [ { "finding": "missing-in-code:accent:*", "reason": "code-syntax-unmatched" } ] }

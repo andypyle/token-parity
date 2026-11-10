@@ -1,0 +1,16 @@
+{
+  "exitCode": 1,
+  "actions": [
+    {
+      "id": "add-code:border-2:*",
+      "op": "add-code",
+      "via": "suggested"
+    }
+  ],
+  "unresolved": [
+    {
+      "finding": "missing-in-figma:spacing:*",
+      "reason": "needs-figma-name"
+    }
+  ]
+}

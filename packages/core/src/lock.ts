@@ -37,6 +37,7 @@ export function parseLock(input: unknown, file: string): LockFile {
 
 function isLockEntry(v: unknown): v is LockModeEntry {
   if (!isObject(v)) return false;
+  for (const k of ["figmaAlias", "codeAlias"]) if (k in v && typeof v[k] !== "string") return false;
   if ("oklch" in v) return typeof v.oklch === "string" && isRgba(v.figmaRgb);
   if ("value" in v) return typeof v.value === "string";
   if ("alias" in v) return typeof v.alias === "string";

@@ -21,6 +21,8 @@ const fixtureArgs = (name: string, lock = true) => [
   "--figma", join(F, name, "figma.json"),
   "--code", join(F, name, "theme.css"),
   ...(lock ? ["--lock", join(F, name, "tokens.lock.json")] : []),
+  "--color-match",
+  "perceptual", // these fixtures describe perceptual matching
 ];
 
 describe("cli", () => {
@@ -82,10 +84,10 @@ describe("cli: plan -> apply -> commit", () => {
     const p = (f: string) => join(dir, f);
     const inputs = ["--figma", p("figma.json"), "--code", p("theme.css"), "--lock", p("tokens.lock.json")];
 
-    const planned = await cli("plan", ...inputs);
+    const planned = await cli("plan", ...inputs, "--color-match", "perceptual");
     expect(planned.code).toBe(0);
     expect(planned.stdout).toContain("# token-parity plan");
-    expect(planned.stdout).toContain("in Semantic (scopes: ALL_FILLS, STROKE_COLOR, EFFECT_COLOR; named like `color-bg`)");
+    expect(planned.stdout).toContain("in Semantic (code: `var(--color-muted)`; scopes: ALL_FILLS, STROKE_COLOR, EFFECT_COLOR; named like `color-bg`)");
 
     const applied = await cli("apply", "--lock", p("tokens.lock.json"));
     expect(applied.code).toBe(0);
@@ -101,7 +103,7 @@ describe("cli: plan -> apply -> commit", () => {
     const committed = await cli("commit", "--figma", p("fresh.json"), "--lock", p("tokens.lock.json"));
     expect(committed.code).toBe(0);
 
-    const after = await cli("check", "--figma", p("fresh.json"), "--code", p("theme.css"), "--lock", p("tokens.lock.json"));
+    const after = await cli("check", "--figma", p("fresh.json"), "--code", p("theme.css"), "--lock", p("tokens.lock.json"), "--color-match", "perceptual");
     expect(after.code).toBe(0);
     expect(after.stdout).toContain("**In sync.**");
   });
@@ -139,7 +141,7 @@ describe("cli: config file and Figma bridge", () => {
 
   it("flags override the config", async () => {
     const dir = copyFixture(join(F, "near-match"));
-    writeJson(join(dir, "token-parity.config.json"), { figma: "figma.json", code: "theme.css", nearThreshold: 0.0001 });
+    writeJson(join(dir, "token-parity.config.json"), { figma: "figma.json", code: "theme.css", nearThreshold: 0.0001, colorMatch: "perceptual" });
     const config = join(dir, "token-parity.config.json");
     expect((await cli("check", "--config", config)).code).toBe(1);
     expect((await cli("check", "--config", config, "--near-threshold", "0.005")).code).toBe(0);

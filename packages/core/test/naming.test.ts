@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { readFigmaExport } from "../src/adapters/figma.js";
 import { check } from "../src/check.js";
 import { formatLike, inferFigmaName } from "../src/naming.js";
-import { copyFixture, readJsonFile, writeJson } from "./helpers.js";
+import { PERCEPTUAL, copyFixture, readJsonFile, writeJson } from "./helpers.js";
 
 describe("formatLike", () => {
   it.each([
@@ -55,7 +55,7 @@ describe("matching by Figma variable id", () => {
     figma.variables["V:3"]!.name = "Surface/Background";
     writeJson(join(dir, "figma.json"), figma);
 
-    const report = await check({ figmaPath: join(dir, "figma.json"), codePath: join(dir, "theme.css"), lockPath: join(dir, "tokens.lock.json") });
+    const report = await check({ settings: PERCEPTUAL, figmaPath: join(dir, "figma.json"), codePath: join(dir, "theme.css"), lockPath: join(dir, "tokens.lock.json") });
     expect(report.findings).toEqual([]);
     expect(report.diagnostics).toContainEqual(expect.objectContaining({ level: "info", token: "color-bg", message: expect.stringContaining("renamed") }));
   });
@@ -76,9 +76,33 @@ describe("scopes for new variables", () => {
     });
     const { writeFileSync } = await import("node:fs");
     writeFileSync(join(dir, "theme.css"), "@theme { --spacing-1: 4px; --spacing-2: 8px; --radius-sm: 4px; --radius-lg: 12px; }\n");
-    const p = await plan({ figmaPath: join(dir, "figma.json"), codePath: join(dir, "theme.css"), lockPath: join(dir, "tokens.lock.json"), prefer: null, resolutionsPath: null, figmaCollection: null });
+    const p = await plan({ settings: PERCEPTUAL, figmaPath: join(dir, "figma.json"), codePath: join(dir, "theme.css"), lockPath: join(dir, "tokens.lock.json"), prefer: null, resolutionsPath: null, figmaCollection: null });
     const adds = Object.fromEntries(p.actions.flatMap((a) => (a.op === "add-figma" ? [[a.token, [a.scopes, a.scopesFrom]]] : [])));
     expect(adds["spacing-2"]).toEqual([["GAP"], "sibling"]);
     expect(adds["radius-lg"]).toEqual([["CORNER_RADIUS"], "namespace"]);
+  });
+});
+
+describe("inferFigmaName through codeSyntax siblings", () => {
+  it("drops the namespace a codeSyntax match reveals: color-green-900 next to green/500 -> green/900", () => {
+    const set = readFigmaExport(
+      {
+        colorProfile: "srgb",
+        variableCollections: {
+          P: { id: "P", name: "Primitives", modes: [{ modeId: "p", name: "Value" }], defaultModeId: "p" },
+          B: { id: "B", name: "Brand", modes: [{ modeId: "b", name: "Value" }], defaultModeId: "b" },
+        },
+        variables: {
+          V1: { id: "V1", name: "green/500", resolvedType: "COLOR", variableCollectionId: "P", codeSyntax: { WEB: "var(--ds-color-green-500)" }, valuesByMode: { p: { r: 0, g: 0, b: 0, a: 1 } } },
+          V2: { id: "V2", name: "color/blue/500", resolvedType: "COLOR", variableCollectionId: "B", valuesByMode: { b: { r: 0, g: 0, b: 0, a: 1 } } },
+        },
+      },
+      "f.json",
+      new Map(),
+      new Set(["color-green-500"]),
+      "ds",
+    );
+    expect(inferFigmaName("color-green-900", set)).toEqual({ name: "green/900", sibling: "color-green-500", siblingCollectionId: "P" });
+    expect(inferFigmaName("color-blue-600", set)).toMatchObject({ name: "color/blue/600", siblingCollectionId: "B" }); // default rule still works
   });
 });

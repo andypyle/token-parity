@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { PERCEPTUAL } from "./helpers.js";
 import { describe, expect, it } from "vitest";
 import { check, exitCodeFor } from "../src/check.js";
 
@@ -38,7 +39,7 @@ describe("fixtures", () => {
       const lockPath = join(dir, "tokens.lock.json");
       const expected = JSON.parse(readFileSync(join(dir, "expected.json"), "utf8")) as Expected;
 
-      const report = await check({
+      const report = await check({ settings: PERCEPTUAL,
         figmaPath: join(dir, "figma.json"),
         codePath: join(dir, "theme.css"),
         lockPath: existsSync(lockPath) ? lockPath : null,

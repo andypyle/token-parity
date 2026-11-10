@@ -1,0 +1,8 @@
+/* A hex/rgba codebase. colorFormat "preserve" (the default) keeps each value's format and style:
+   lowercase hex, UPPERCASE hex, legacy rgba(). The new token uses the file's usual format (hex). */
+@theme {
+  --color-bg: #18181b;
+  --color-brand: #8843DB;
+  --color-overlay: rgba(5, 7, 9, 0.6);
+  --color-new: #fafafa;
+}

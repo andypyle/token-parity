@@ -2,7 +2,7 @@
   "version": 1,
   "colorProfile": "srgb",
   "operations": [
-    { "op": "create-variable", "name": "color/muted", "collectionId": "VC:2", "resolvedType": "COLOR", "scopes": ["ALL_FILLS", "STROKE_COLOR", "EFFECT_COLOR"] },
+    { "op": "create-variable", "name": "color/muted", "collectionId": "VC:2", "resolvedType": "COLOR", "scopes": ["ALL_FILLS", "STROKE_COLOR", "EFFECT_COLOR"], "codeSyntax": "var(--color-muted)" },
     { "op": "set-value", "variableName": "color/muted", "modeId": "2:0", "value": { "type": "COLOR", "r": 0.534875, "g": 0.2618, "b": 0.860658, "a": 1 } },
     { "op": "set-value", "variableName": "color/muted", "modeId": "2:1", "value": { "type": "COLOR", "r": 0.871648, "g": 0.241823, "b": 0.175167, "a": 1 } }
   ]

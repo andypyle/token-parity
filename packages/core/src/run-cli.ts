@@ -34,7 +34,8 @@ Figma bridge (used by the Claude Code skill with the Figma MCP's use_figma tool)
                                                  confirm a saved export matches what Figma returned
 
 Every command reads defaults from ./${CONFIG_FILE} (or --config <file>): figma, code, lock,
-resolutions, figmaCollection, modes, nearThreshold, rgbTolerance, precision, remBase.
+resolutions, figmaCollection, modes, prefix, ignore, colorFormat, colorMatch, nearThreshold, rgbTolerance,
+precision, remBase.
 Paths in it are relative to the config file. Flags override it.
 
 check options:
@@ -51,6 +52,13 @@ Comparison options (check, plan):
   --rgb-tolerance <n>      per-channel 0-1 tolerance vs locked RGB (default: 0.00196)
   --precision <l,c,h>      decimals when converting changed Figma RGB (default: 4,4,2)
   --rem-base <n>           px per rem (default: 16)
+  --color-format <f>       how plan writes colors into CSS: preserve (default; keep each value's
+                           format, new tokens use the file's usual one), hex, rgb, or oklch
+                           (oklch needs --color-match perceptual)
+  --color-match <m>        exact (default): colors must be Figma's 8-bit value, written as hex or rgb();
+                           perceptual: compare by OKLCH distance, rounding is a near-match
+  --ignore <pattern>       leave a token alone: CSS or Figma name, glob, optional :mode
+                           (e.g. animate-*, dark/*, color-amber-*:dark); repeatable
   --mode <name=selector>   CSS selector or at-rule for a mode; repeatable; replaces the
                            default (dark=.dark, dark=[data-theme="dark"], dark=@variant dark)
 
@@ -77,6 +85,9 @@ const COMPARE_OPTIONS = {
   precision: { type: "string" },
   "rem-base": { type: "string" },
   mode: { type: "string", multiple: true },
+  ignore: { type: "string", multiple: true },
+  "color-format": { type: "string" },
+  "color-match": { type: "string" },
 } as const satisfies ParseArgsConfig["options"];
 
 const OPTIONS = {
@@ -372,6 +383,18 @@ function settingsFrom(values: Values): Partial<CompareSettings> {
       throw new UsageError("--precision must be three non-negative integers: l,c,h");
     }
     settings.precision = { l: parts[0]!, c: parts[1]!, h: parts[2]! };
+  }
+
+  if (Array.isArray(values.ignore)) settings.ignore = values.ignore;
+  if (typeof values["color-format"] === "string") {
+    const f = values["color-format"];
+    if (f !== "preserve" && f !== "oklch" && f !== "hex" && f !== "rgb") throw new UsageError("--color-format must be preserve, oklch, hex or rgb");
+    settings.colorFormat = f;
+  }
+  if (typeof values["color-match"] === "string") {
+    const m = values["color-match"];
+    if (m !== "exact" && m !== "perceptual") throw new UsageError("--color-match must be exact or perceptual");
+    settings.colorMatch = m;
   }
 
   if (Array.isArray(values.mode)) {

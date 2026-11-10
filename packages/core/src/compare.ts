@@ -8,6 +8,9 @@
 // - A code color outside Figma's gamut is a warning; comparisons against converted Figma values use the
 //   gamut-mapped code color so clamping never counts as drift.
 import { resolveAlias, type Literal } from "./alias.js";
+import { compileIgnore, type IgnoreMatcher } from "./ignore.js";
+import { cssColorFormat } from "./values.js";
+import { isColorMix } from "./color-mix.js";
 import * as color from "./color.js";
 import {
   DEFAULT_MODE,
@@ -26,6 +29,7 @@ import {
   type Rgba,
   type Severity,
   type SideValue,
+  type TokenKey,
   type TokenSet,
   type TokenType,
   type TokenValue,
@@ -45,6 +49,8 @@ const SEVERITY: Record<FindingKind, Severity> = {
   "missing-mode": "error",
   conflict: "error",
   "near-match": "info",
+  "format-mismatch": "error",
+  "alias-mismatch": "error",
   "out-of-gamut": "warning",
 };
 
@@ -69,6 +75,10 @@ interface Ctx extends CompareInput {
   /** False when the lock's RGB was recorded in a different profile than the Figma file now uses. */
   lockRgbUsable: boolean;
   findings: Finding[];
+  ignore: IgnoreMatcher;
+  ignored: { tokens: number; modes: number };
+  /** colorMatch "exact" in effect (needs an sRGB Figma file). */
+  exact: boolean;
 }
 
 export function compare(input: CompareInput): CompareResult {
@@ -82,21 +92,47 @@ export function compare(input: CompareInput): CompareResult {
       message: `Lock RGB values were recorded in ${input.lock!.figmaColorProfile} but the Figma file is ${profile}; every Figma color is treated as changed.`,
     });
   }
-  const ctx: Ctx = { ...input, profile, lockRgbUsable, findings: [] };
+  let exact = input.settings.colorMatch !== "perceptual";
+  if (exact && profile === "display-p3") {
+    exact = false;
+    diagnostics.push({
+      level: "warning",
+      origin: "figma",
+      message: "Exact color matching compares 8-bit sRGB values, but this Figma file uses Display P3; colors are compared perceptually instead.",
+    });
+  }
+  const ctx: Ctx = {
+    ...input,
+    profile,
+    lockRgbUsable,
+    findings: [],
+    ignore: compileIgnore(input.settings.ignore),
+    ignored: { tokens: 0, modes: 0 },
+    exact,
+  };
 
   const keys = [...new Set([...input.figma.tokens.keys(), ...input.code.tokens.keys()])].sort();
   for (const key of keys) {
     const f = input.figma.tokens.get(key);
     const c = input.code.tokens.get(key);
     const l = input.lock?.tokens[key];
+    if (ctx.ignore.token(key, f, c)) {
+      ctx.ignored.tokens++;
+      continue;
+    }
     if (f && c) compareToken(ctx, f, c, l);
     else if (f) missingOnOneSide(ctx, "missing-in-code", f, l);
     else if (c) missingOnOneSide(ctx, "missing-in-figma", c, l);
   }
 
+  if (ctx.ignored.tokens + ctx.ignored.modes > 0) {
+    const parts = [ctx.ignored.tokens > 0 ? `${ctx.ignored.tokens} token${ctx.ignored.tokens === 1 ? "" : "s"}` : "", ctx.ignored.modes > 0 ? `${ctx.ignored.modes} mode value${ctx.ignored.modes === 1 ? "" : "s"}` : ""].filter(Boolean);
+    diagnostics.push({ level: "info", origin: "code", message: `Ignored ${parts.join(" and ")} per the \`ignore\` setting.` });
+  }
   const findings = dedupe(ctx.findings).sort(byTokenModeKind);
   const failing = new Set(findings.filter((f) => f.severity === "error").map((f) => f.token));
-  return { findings, tokensCompared: keys.length, inSync: keys.length - failing.size, diagnostics };
+  const compared = keys.length - ctx.ignored.tokens;
+  return { findings, tokensCompared: compared, inSync: compared - failing.size, diagnostics };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -112,7 +148,7 @@ function missingOnOneSide(ctx: Ctx, kind: "missing-in-code" | "missing-in-figma"
   let changedHere: boolean | null = null;
   if (lock) {
     changedHere = token.modes.some((m) => {
-      const entry = lock.modes[m];
+      const entry = lockEntryFor(lock, modeLabel(token, m), m);
       return !entry || !lockMatches(ctx, side, token.values[m]!, entry);
     });
     direction = changedHere ? "needs-decision" : deleteOther;
@@ -129,12 +165,14 @@ function missingOnOneSide(ctx: Ctx, kind: "missing-in-code" | "missing-in-figma"
     type: token.type,
     figma: side === "figma" ? sideValue : null,
     code: side === "code" ? sideValue : null,
-    lock: lock?.modes[mode0] ?? null,
+    lock: lockEntryFor(lock, modeLabel(token, mode0), mode0),
     changed: side === "figma" ? { figma: changedHere, code: lock ? true : null } : { figma: lock ? true : null, code: changedHere },
     suggestedDirection: direction,
-    message: lock
-      ? `Exists in ${where} but was removed from ${other} since the last sync.`
-      : `Exists in ${where} but not in ${other}.`,
+    message:
+      (lock ? `Exists in ${where} but was removed from ${other} since the last sync.` : `Exists in ${where} but not in ${other}.`) +
+      (side === "figma" && !lock && !token.source.figma?.codeSyntax
+        ? " If code has it under another name, set codeSyntax.WEB on the Figma variable to link them."
+        : ""),
   });
 
   if (side === "code") {
@@ -163,10 +201,14 @@ function compareToken(ctx: Ctx, f: NormalizedToken, c: NormalizedToken, lock: Lo
   }
 
   for (const pair of pairModes(f, c)) {
-    const lockEntry = lock?.modes[pair.mode] ?? null;
+    if (ctx.ignore.mode(f.key, pair.mode, f, c)) {
+      ctx.ignored.modes++;
+      continue;
+    }
+    const lockEntry = lockEntryFor(lock, pair.mode, pair.figmaMode);
     if (pair.figma && pair.code) {
       if (brokenF.has(pair.figmaMode) || brokenC.has(pair.codeMode)) continue;
-      comparePair(ctx, f, c, pair.mode, pair.figma, pair.code, lockEntry);
+      comparePair(ctx, f, c, pair, lockEntry);
     } else {
       missingMode(ctx, f, c, pair.mode, pair.figma, pair.code, lockEntry);
     }
@@ -175,6 +217,19 @@ function compareToken(ctx: Ctx, f: NormalizedToken, c: NormalizedToken, lock: Lo
 
 // ---------------------------------------------------------------------------------------------
 // Mode pairing
+
+/**
+ * Report and lock label for a token's mode: the base mode is always "default" (code's @theme value), whatever
+ * Figma calls it ("Light", "Value"); other modes keep their names ("dark").
+ */
+export function modeLabel(token: NormalizedToken, mode: ModeName): ModeName {
+  return token.source.origin === "figma" && mode === token.modes[0] ? DEFAULT_MODE : mode;
+}
+
+/** The lock entry for a label, falling back to the Figma mode name that older locks used ("light"). */
+export function lockEntryFor(lock: LockToken | undefined, label: ModeName, figmaMode?: ModeName): LockModeEntry | null {
+  return lock?.modes[label] ?? (figmaMode ? lock?.modes[figmaMode] : undefined) ?? null;
+}
 
 export interface Pair {
   mode: ModeName; // label used in findings and lock lookups
@@ -196,10 +251,16 @@ export function pairModes(f: NormalizedToken, c: NormalizedToken): Pair[] {
     return [{ mode: DEFAULT_MODE, figmaMode: DEFAULT_MODE, codeMode: DEFAULT_MODE, figma: f.values[DEFAULT_MODE], code: c.values[DEFAULT_MODE] }];
   }
   if (fSingle) {
-    return c.modes.map((m) => ({ mode: m, figmaMode: DEFAULT_MODE, codeMode: m, figma: f.values[DEFAULT_MODE], code: c.values[m] }));
+    // A single-mode Figma collection has nowhere to hold code's extra modes (e.g. a dark override of a
+    // primitive): compare the default, and report each extra code mode as missing in Figma.
+    return c.modes.map((m) =>
+      m === DEFAULT_MODE
+        ? { mode: m, figmaMode: DEFAULT_MODE, codeMode: m, figma: f.values[DEFAULT_MODE], code: c.values[m] }
+        : { mode: m, figmaMode: DEFAULT_MODE, codeMode: m, figma: undefined, code: c.values[m] },
+    );
   }
   if (cSingle) {
-    return f.modes.map((m) => ({ mode: m, figmaMode: m, codeMode: DEFAULT_MODE, figma: f.values[m], code: c.values[DEFAULT_MODE] }));
+    return f.modes.map((m) => ({ mode: modeLabel(f, m), figmaMode: m, codeMode: DEFAULT_MODE, figma: f.values[m], code: c.values[DEFAULT_MODE] }));
   }
   const figmaDefault = f.modes[0]!;
   const codeName = (m: ModeName) => (m === DEFAULT_MODE ? figmaDefault : m);
@@ -207,7 +268,7 @@ export function pairModes(f: NormalizedToken, c: NormalizedToken): Pair[] {
   const labels = [...f.modes, ...c.modes.map(codeName).filter((m) => !f.modes.includes(m))];
   return labels.map((label) => {
     const codeMode = codeByName.get(label) ?? label;
-    return { mode: label, figmaMode: label, codeMode, figma: f.values[label], code: c.values[codeMode] };
+    return { mode: label === figmaDefault ? DEFAULT_MODE : label, figmaMode: label, codeMode, figma: f.values[label], code: c.values[codeMode] };
   });
 }
 
@@ -235,7 +296,10 @@ function missingMode(
     lock: lockEntry,
     changed: { figma: null, code: null },
     suggestedDirection: lockEntry ? (unchangedHere ? deleteOther : "needs-decision") : towardOther,
-    message: `Mode "${mode}" exists in ${side === "figma" ? "Figma" : "code"} but not in ${side === "figma" ? "code" : "Figma"}.`,
+    message:
+      side === "code" && f.modes.length === 1 && f.modes[0] === DEFAULT_MODE
+        ? `Code defines a ${mode} value, but Figma collection "${f.source.figma?.collection}" has no ${mode} mode.`
+        : `Mode "${mode}" exists in ${side === "figma" ? "Figma" : "code"} but not in ${side === "figma" ? "code" : "Figma"}.`,
   });
 }
 
@@ -246,7 +310,7 @@ function brokenAliases(ctx: Ctx, set: TokenSet, token: NormalizedToken, side: "f
   const broken = new Set<ModeName>();
   for (const mode of token.modes) {
     const value = token.values[mode]!;
-    if (value.kind !== "alias") continue;
+    if (value.kind !== "alias" || ctx.ignore.mode(token.key, mode, token)) continue;
     const r = resolveAlias(set, value, mode);
     let problem: "missing-target" | "cycle" | "type-mismatch" | null = null;
     let detail = "";
@@ -264,7 +328,7 @@ function brokenAliases(ctx: Ctx, set: TokenSet, token: NormalizedToken, side: "f
       {
         kind: "broken-alias",
         token: token.key,
-        mode,
+        mode: modeLabel(token, mode),
         type: token.type,
         figma: side === "figma" ? describe(token, value) : null,
         code: side === "code" ? describe(token, value) : null,
@@ -293,15 +357,34 @@ interface Comparison {
   figmaOklch?: { color: OklchColor; source: "lock" | "converted" };
 }
 
-function comparePair(ctx: Ctx, f: NormalizedToken, c: NormalizedToken, mode: ModeName, fv: TokenValue, cv: TokenValue, lockEntry: LockModeEntry | null) {
+function comparePair(ctx: Ctx, f: NormalizedToken, c: NormalizedToken, pair: Pair, lockEntry: LockModeEntry | null) {
+  const { mode } = pair;
+  const fv = pair.figma!;
+  const cv = pair.code!;
+  // Unless both sides alias the same variable, compare resolved values: Figma's {dark/fg-1} and code's
+  // #e9edf0 are the same color, and so are Figma {gray/900} and code var(--color-on-fill) -> var(--color-gray-900).
+  const byValue = resolvesByValue(fv, cv);
+  const fCmp = byValue ? resolvedOr(ctx.figma, fv, pair.figmaMode) : fv;
+  const cCmp = byValue ? resolvedOr(ctx.code, cv, runtimeCodeMode(f, pair)) : cv;
+  // A color-mix() code couldn't evaluate was already reported (as a warning); there's nothing to compare.
+  if (cCmp.kind === "string" && isColorMix(cCmp.raw)) return;
   const result =
-    fv.kind === "color" && cv.kind === "color" ? compareColors(ctx, fv, cv, lockEntry) : compareGeneric(ctx, fv, cv, lockEntry);
+    fCmp.kind === "color" && cCmp.kind === "color" ? compareColors(ctx, fCmp, cCmp, lockEntry) : compareGeneric(ctx, fCmp, cCmp, lockEntry);
+  // A side is unchanged if either its alias or its resolved value is what the lock recorded.
+  if (lockEntry && byValue) {
+    if (result.figmaChanged && lockMatches(ctx, "figma", fv, lockEntry)) result.figmaChanged = false;
+    if (result.codeChanged && lockMatches(ctx, "code", cv, lockEntry)) result.codeChanged = false;
+  }
 
   const changed = { figma: result.figmaChanged, code: result.codeChanged };
   gamutCheck(ctx, c, mode, cv, lockEntry, changed);
 
   const classification = classify(result);
-  if (!classification) return;
+  if (!classification) {
+    if (fv.kind === "alias" && cv.kind === "alias" && fv.ref !== cv.ref) return aliasMismatch(ctx, f, c, mode, fv, cv, lockEntry);
+    if (ctx.exact) formatCheck(ctx, f, c, mode, cv, cCmp, lockEntry, changed);
+    return;
+  }
 
   const figma = describe(f, fv, result.figmaOklch);
   const code = describe(c, cv);
@@ -343,12 +426,101 @@ function classify(r: Comparison): { kind: "value-mismatch" | "near-match" | "con
   return { kind: "value-mismatch", direction: r.figmaChanged ? "figma-to-code" : "code-to-figma" };
 }
 
+/**
+ * Exact matching: a color equals Figma's only when its 8-bit sRGB value (what Figma shows, e.g. #0000FF) is
+ * identical. No tolerance, no near-match. Lock changes are judged on the same bytes.
+ */
+function compareColorsExact(
+  ctx: Ctx,
+  fv: Extract<TokenValue, { kind: "color" }>,
+  cv: Extract<TokenValue, { kind: "color" }>,
+  lockEntry: LockModeEntry | null,
+): Comparison {
+  const fBytes = color.srgbBytes(fv.color);
+  const cBytes = color.srgbBytes(cv.color);
+  const locked = lockEntry && "oklch" in lockEntry ? lockEntry : null;
+  const lockFigma = locked ? color.srgbBytes({ space: "srgb", r: locked.figmaRgb.r, g: locked.figmaRgb.g, b: locked.figmaRgb.b, alpha: locked.figmaRgb.a }) : null;
+  const lockCode = locked ? color.srgbBytes(color.parseOklch(locked.oklch)!) : null;
+  const figmaOklch = { color: fv.color.space === "oklch" ? fv.color : color.rgbToOklch(fv.color, ctx.settings.precision), source: "converted" as const };
+  return {
+    figmaChanged: lockEntry ? !(locked && color.sameBytes(fBytes, lockFigma)) : null,
+    codeChanged: lockEntry ? !(locked && color.sameBytes(cBytes, lockCode)) : null,
+    relation: color.sameBytes(fBytes, cBytes) ? "same" : "different",
+    figmaOklch,
+  };
+}
+
+/**
+ * Same value, different alias targets: e.g. Figma Dark still aliases {dark/page} while code moved to
+ * var(--ds-color-gray-950). Values agree, but the structure has drifted. The lock's per-side aliases say who moved.
+ */
+function aliasMismatch(
+  ctx: Ctx,
+  f: NormalizedToken,
+  c: NormalizedToken,
+  mode: ModeName,
+  fv: Extract<TokenValue, { kind: "alias" }>,
+  cv: Extract<TokenValue, { kind: "alias" }>,
+  lockEntry: LockModeEntry | null,
+) {
+  const lf = lockedAlias(lockEntry, "figma");
+  const lc = lockedAlias(lockEntry, "code");
+  const changed = { figma: lf === undefined ? null : fv.ref !== lf, code: lc === undefined ? null : cv.ref !== lc };
+  const direction: Direction =
+    changed.figma === true && changed.code === false ? "figma-to-code" : changed.code === true && changed.figma === false ? "code-to-figma" : "needs-decision";
+  const moved = direction === "figma-to-code" ? " Figma changed its alias since the last sync." : direction === "code-to-figma" ? " Code changed its alias since the last sync." : "";
+  push(ctx, {
+    kind: "alias-mismatch",
+    token: f.key,
+    mode,
+    type: f.type,
+    figma: describe(f, fv),
+    code: describe(c, cv),
+    lock: lockEntry,
+    changed,
+    suggestedDirection: direction,
+    message: `Same value, but Figma aliases ${fv.raw} and code aliases ${cv.raw}.${moved}`,
+  });
+}
+
+/** Exact matching also needs code to spell the color the way Figma shows it: hex or rgb(), not oklch(). */
+function formatCheck(
+  ctx: Ctx,
+  f: NormalizedToken,
+  c: NormalizedToken,
+  mode: ModeName,
+  cv: TokenValue,
+  cCmp: TokenValue,
+  lockEntry: LockModeEntry | null,
+  changed: { figma: boolean | null; code: boolean | null },
+) {
+  if (cv.kind !== "color" || cCmp.kind !== "color") return;
+  const format = cssColorFormat(cv.raw);
+  // color-mix() is an expression over other tokens, not a notation choice: nothing to rewrite.
+  if (format === "hex" || format === "rgb" || isColorMix(cv.raw)) return;
+  const bytes = color.srgbBytes(cv.color);
+  const hex = bytes ? `#${bytes.slice(0, 3).map((b) => b.toString(16).padStart(2, "0")).join("")}${bytes[3] !== 255 ? bytes[3]!.toString(16).padStart(2, "0") : ""}` : null;
+  push(ctx, {
+    kind: "format-mismatch",
+    token: f.key,
+    mode,
+    type: f.type,
+    figma: null,
+    code: describe(c, cv),
+    lock: lockEntry,
+    changed,
+    suggestedDirection: "figma-to-code",
+    message: `Same color as Figma, but code writes it as ${cv.raw}; exact matching needs hex or rgb()${hex ? ` (${hex})` : ""} so it matches what Figma shows.`,
+  });
+}
+
 function compareColors(
   ctx: Ctx,
   fv: Extract<TokenValue, { kind: "color" }>,
   cv: Extract<TokenValue, { kind: "color" }>,
   lockEntry: LockModeEntry | null,
 ): Comparison {
+  if (ctx.exact) return compareColorsExact(ctx, fv, cv, lockEntry);
   const codeColor = asOklch(cv.color);
   const locked = lockEntry && "oklch" in lockEntry ? lockEntry : null;
 
@@ -376,6 +548,38 @@ function compareColors(
   return { figmaChanged, codeChanged, relation, distance, figmaOklch };
 }
 
+/**
+ * The mode a code alias resolves in. CSS resolves var() at runtime, so a single `@theme` value like
+ * var(--color-green-100) picks up `.dark { --color-green-100: … }` when the dark pair is compared.
+ */
+export function runtimeCodeMode(f: NormalizedToken, pair: Pair): ModeName {
+  const fMulti = !(f.modes.length === 1 && f.modes[0] === DEFAULT_MODE);
+  return fMulti && pair.codeMode === DEFAULT_MODE && pair.figmaMode !== f.modes[0] ? pair.mode : pair.codeMode;
+}
+
+/** Whether two resolved values are the same under the current color matching. */
+export function sameValue(settings: CompareSettings, a: TokenValue, b: TokenValue): boolean {
+  if (a.kind === "alias" || b.kind === "alias") return a.kind === "alias" && b.kind === "alias" && a.ref === b.ref;
+  if (a.kind === "color" && b.kind === "color") {
+    if (settings.colorMatch !== "perceptual") return color.sameBytes(color.srgbBytes(a.color), color.srgbBytes(b.color));
+    return color.deltaEOK(asOklch(a.color), asOklch(b.color)) < SAME_COLOR_EPSILON;
+  }
+  if (a.kind === "color" || b.kind === "color") return false;
+  return scalarEqual(scalar(a, settings.remBase), scalar(b, settings.remBase));
+}
+
+/** True unless both values are literals, or both alias the same variable (which is equal by structure). */
+export function resolvesByValue(a: TokenValue, b: TokenValue): boolean {
+  if (a.kind !== "alias" && b.kind !== "alias") return false;
+  return !(a.kind === "alias" && b.kind === "alias" && a.ref === b.ref);
+}
+
+export function resolvedOr(set: TokenSet, value: TokenValue, mode: ModeName): TokenValue {
+  if (value.kind !== "alias") return value;
+  const r = resolveAlias(set, value, mode);
+  return r.ok ? r.value : value;
+}
+
 function compareGeneric(ctx: Ctx, fv: TokenValue, cv: TokenValue, lockEntry: LockModeEntry | null): Comparison {
   return {
     figmaChanged: lockEntry ? !lockMatches(ctx, "figma", fv, lockEntry) : null,
@@ -385,8 +589,17 @@ function compareGeneric(ctx: Ctx, fv: TokenValue, cv: TokenValue, lockEntry: Loc
 }
 
 /** Does this side's value still equal what the lock recorded for it? */
+/** The variable a side aliased according to the lock: undefined when that side held a literal (or the lock can't say). */
+export function lockedAlias(entry: LockModeEntry | null, side: "figma" | "code"): TokenKey | undefined {
+  if (!entry) return undefined;
+  if ("alias" in entry) return entry.alias;
+  return side === "figma" ? entry.figmaAlias : entry.codeAlias;
+}
+
 export function lockMatches(ctx: Pick<Ctx, "lockRgbUsable" | "settings">, side: "figma" | "code", value: TokenValue, entry: LockModeEntry): boolean {
-  if (value.kind === "alias") return "alias" in entry && entry.alias === value.ref;
+  if (value.kind === "alias") return lockedAlias(entry, side) === value.ref;
+  // A side that aliased at the last sync and now holds a literal has changed.
+  if (!("alias" in entry) && lockedAlias(entry, side) !== undefined) return false;
   if (value.kind === "color") {
     if (!("oklch" in entry)) return false;
     if (side === "figma" && value.color.space !== "oklch") {

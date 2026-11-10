@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { PERCEPTUAL } from "./helpers.js";
 import { describe, expect, it } from "vitest";
 import { check } from "../src/check.js";
 import { renderJson } from "../src/report/json.js";
@@ -6,7 +7,7 @@ import { renderMarkdown } from "../src/report/markdown.js";
 
 const FIXTURES = join(import.meta.dirname, "fixtures");
 const run = (name: string, lock = true) =>
-  check({
+  check({ settings: PERCEPTUAL,
     figmaPath: join(FIXTURES, name, "figma.json"),
     codePath: join(FIXTURES, name, "theme.css"),
     lockPath: lock ? join(FIXTURES, name, "tokens.lock.json") : null,

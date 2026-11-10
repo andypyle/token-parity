@@ -6,7 +6,7 @@ import { check } from "../src/check.js";
 import { commitPending } from "../src/commit.js";
 import { plan, planExitCode } from "../src/plan.js";
 import type { FigmaChangeSet, LockFile, Plan } from "../src/types.js";
-import { copyFixture, readJsonFile, simulatePush, writeJson } from "./helpers.js";
+import { PERCEPTUAL, copyFixture, readJsonFile, simulatePush, writeJson } from "./helpers.js";
 
 const ROOT = import.meta.dirname;
 const dirs = (sub: string) =>
@@ -17,6 +17,7 @@ const dirs = (sub: string) =>
 const ALL = [...dirs("fixtures"), ...dirs("plan-fixtures")];
 
 interface Options {
+  settings?: Record<string, unknown>;
   prefer?: "code" | "figma";
   figmaCollection?: string;
   allowDeletes?: boolean;
@@ -36,7 +37,7 @@ function options(dir: string): Options {
 async function planIn(dir: string, figmaFile = "figma.json"): Promise<Plan> {
   const o = options(dir);
   const resolutions = join(dir, "resolutions.json");
-  return plan({
+  return plan({ settings: { ...PERCEPTUAL, ...o.settings },
     figmaPath: join(dir, figmaFile),
     codePath: join(dir, "theme.css"),
     lockPath: join(dir, "tokens.lock.json"),
@@ -70,13 +71,21 @@ describe("plan", () => {
   it("adds Figma identity to the lock for already-synced tokens", async () => {
     const p = await planIn(join(ROOT, "fixtures", "round-trip-unchanged"));
     expect(p.lockAfter.tokens["color-bg"]!.figma).toEqual({ variableId: "V:3", name: "color/bg" });
-    expect(p.lockAfter.tokens["color-bg"]!.modes).toEqual(readJsonFile<LockFile>(join(ROOT, "fixtures", "round-trip-unchanged", "tokens.lock.json")).tokens["color-bg"]!.modes);
+    // The old lock keyed the base mode "light"; it's migrated to "default" with the same entry.
+    const old = readJsonFile<LockFile>(join(ROOT, "fixtures", "round-trip-unchanged", "tokens.lock.json")).tokens["color-bg"]!.modes;
+    expect(p.lockAfter.tokens["color-bg"]!.modes).toEqual({ default: old.light, dark: old.dark });
   });
 
   it("baselines in-sync tokens that have no lock entry", async () => {
     const p = await planIn(join(ROOT, "fixtures", "in-sync-no-lock"));
     expect(p.lockAfter.tokens["color-bg"]!.modes.dark).toEqual({ oklch: "oklch(0.21 0.006 285.9)", figmaRgb: { r: 0.093799, g: 0.093792, b: 0.105831, a: 1 } });
-    expect(p.lockAfter.tokens["color-accent"]!.modes.light).toEqual({ alias: "color-blue-500" });
+    // Both sides alias color-blue-500: the lock keeps the resolved value and both aliases.
+    expect(p.lockAfter.tokens["color-accent"]!.modes.default).toEqual({
+      oklch: "oklch(0.62 0.19 259.8)",
+      figmaRgb: { r: 0.223056, g: 0.505183, b: 0.964919, a: 1 },
+      figmaAlias: "color-blue-500",
+      codeAlias: "color-blue-500",
+    });
     expect(p.lockAfter.tokens["radius-md"]!.modes.default).toEqual({ value: "0.5rem" });
   });
 
@@ -180,8 +189,10 @@ describe("round trip: plan -> apply -> push -> commit leaves touched tokens in s
         expect(existsSync(join(dir, ".token-parity", "pending.json"))).toBe(false);
       }
 
-      const report = await check({ figmaPath: join(dir, figmaFile), codePath: join(dir, "theme.css"), lockPath: join(dir, "tokens.lock.json") });
-      const leftovers = report.findings.filter((f) => touched.has(f.token) && f.severity !== "warning");
+      const report = await check({ settings: { ...PERCEPTUAL, ...options(dir).settings }, figmaPath: join(dir, figmaFile), codePath: join(dir, "theme.css"), lockPath: join(dir, "tokens.lock.json") });
+      // Everything the plan resolved must be in sync; what it left for the user to decide may remain.
+      const leftForUser = new Set([...p.unresolved.map((u) => u.finding), ...p.skipped]);
+      const leftovers = report.findings.filter((f) => touched.has(f.token) && f.severity !== "warning" && !leftForUser.has(f.id));
       expect(leftovers).toEqual([]);
 
       const again = await planIn(dir, figmaFile);

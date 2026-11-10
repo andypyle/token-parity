@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "colorProfile": "srgb",
+  "operations": [
+    { "op": "create-variable", "name": "gray/950", "collectionId": "P", "resolvedType": "COLOR", "scopes": ["ALL_FILLS", "STROKE_COLOR"], "codeSyntax": "var(--ds-color-gray-950)" },
+    { "op": "set-value", "variableName": "gray/950", "modeId": "p", "value": { "type": "COLOR", "r": 0.078431, "g": 0.094118, "b": 0.109804, "a": 1 } },
+    { "op": "set-value", "variableId": "V4", "modeId": "k", "value": { "type": "ALIAS", "name": "gray/950" } }
+  ]
+}

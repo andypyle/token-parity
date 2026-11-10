@@ -1,0 +1,8 @@
+{ "exitCode": 0,
+  "actions": [
+    { "id": "update-code:color-bg:default", "op": "update-code", "via": "prefer" },
+    { "id": "update-code:color-brand:default", "op": "update-code", "via": "prefer" },
+    { "id": "add-code:color-new:*", "op": "add-code", "via": "suggested" },
+    { "id": "update-code:color-overlay:default", "op": "update-code", "via": "prefer" }
+  ],
+  "unresolved": [] }

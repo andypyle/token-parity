@@ -1,0 +1,6 @@
+{
+  "exitCode": 1,
+  "findings": [
+    { "id": "missing-in-code:accent:*", "kind": "missing-in-code", "token": "accent", "mode": null, "severity": "error", "suggestedDirection": "figma-to-code" }
+  ]
+}

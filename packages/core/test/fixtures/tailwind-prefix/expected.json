@@ -1,0 +1,21 @@
+{
+  "exitCode": 1,
+  "findings": [
+    {
+      "id": "missing-in-code:border-2:*",
+      "kind": "missing-in-code",
+      "token": "border-2",
+      "mode": null,
+      "severity": "error",
+      "suggestedDirection": "figma-to-code"
+    },
+    {
+      "id": "missing-in-figma:spacing:*",
+      "kind": "missing-in-figma",
+      "token": "spacing",
+      "mode": null,
+      "severity": "error",
+      "suggestedDirection": "code-to-figma"
+    }
+  ]
+}

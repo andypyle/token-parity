@@ -1,0 +1,16 @@
+/* Real-project-style: Tailwind prefix(ds). @theme declares unprefixed names; Tailwind emits --ds-*.
+   Figma codeSyntax uses the emitted names (var(--ds-…)) plus expressions/literals that name no token.
+   The dark override uses the emitted (prefixed) name. */
+@import "tailwindcss" prefix(ds);
+
+@theme {
+  --color-slate-50: oklch(0.985 0 0);
+  --color-surface: var(--color-slate-50);
+  --text-xs: 0.75rem;
+  --spacing: 0.25rem;
+  --border-2: 2;
+}
+
+[data-theme="dark"] {
+  --ds-color-surface: oklch(0.21 0.006 285.9);
+}
