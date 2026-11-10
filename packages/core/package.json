@@ -2,8 +2,31 @@
   "name": "token-parity",
   "version": "0.1.0",
   "description": "Check and sync design tokens between Figma variables and code.",
-  "type": "module",
+  "keywords": [
+    "design-tokens",
+    "figma",
+    "figma-variables",
+    "tailwind",
+    "tailwindcss",
+    "css-variables",
+    "design-system",
+    "claude-code"
+  ],
+  "author": "Andy Pyle",
   "license": "MIT",
+  "homepage": "https://github.com/andypyle/token-parity#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/andypyle/token-parity.git",
+    "directory": "packages/core"
+  },
+  "bugs": {
+    "url": "https://github.com/andypyle/token-parity/issues"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "bin": {
     "token-parity": "./dist/cli.js"
   },
@@ -21,7 +44,8 @@
     "dev": "tsdown --watch",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm typecheck && pnpm test && pnpm build"
   },
   "dependencies": {
     "culori": "^4.0.2",

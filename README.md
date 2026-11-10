@@ -223,15 +223,13 @@ comes from Figma, the unit already used in your CSS is kept.
 ## Using the CLI
 
 The skill runs these for you. You can also run them yourself, provided you can export Figma variables.
-The engine is a single file with no dependencies, `skills/token-parity/bin/token-parity.mjs` in this repo,
-run with `node` (an npm package is on the [roadmap](#roadmap)):
+Install the CLI from npm with `npm install -D token-parity` and run it with `npx`:
 
 ```sh
-alias token-parity="node /path/to/token-parity.mjs"
-token-parity check                                # report drift; exits 1 if there is any
-token-parity plan [--prefer code|figma]           # show what a sync would change
-token-parity apply [--allow-deletes]              # edit your CSS, prepare Figma's changes
-token-parity commit --figma <fresh export>        # after Figma is updated: write the lock
+npx token-parity check                                # report drift; exits 1 if there is any
+npx token-parity plan [--prefer code|figma]           # show what a sync would change
+npx token-parity apply [--allow-deletes]              # edit your CSS, prepare Figma's changes
+npx token-parity commit --figma <fresh export>        # after Figma is updated: write the lock
 ```
 
 With a config file no flags are needed. Every setting can also be passed as a flag (`--figma`, `--code`,
@@ -311,12 +309,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
-      - run: curl -fsSL -o token-parity.mjs https://raw.githubusercontent.com/andypyle/token-parity/v0.1.0/skills/token-parity/bin/token-parity.mjs
-      - run: node token-parity.mjs check
+      - run: npx token-parity@0.1.0 check
 ```
 
-The engine is one self-contained file, so CI downloads it from a release tag. Pin the tag, so CI only
-changes when you choose to upgrade.
+Pin the version, so CI only changes when you choose to upgrade. If you'd rather not use npm, the engine is
+also one self-contained file you can download from a release tag and run with `node`:
+`https://raw.githubusercontent.com/andypyle/token-parity/v0.1.0/skills/token-parity/bin/token-parity.mjs`.
 
 ## Limitations
 
@@ -334,7 +332,6 @@ changes when you choose to upgrade.
 - **Figma as the only source of truth:** a one-way mode for teams where designers own the system. Code
   changes are reported as drift to undo, and CI fails on token edits made in code. The skill would only
   ever read Figma.
-- **Publishing to npm:** `npm install -D token-parity` for using the CLI without Claude Code, and for CI.
 - **Larger syncs:** split big change sets across several pushes automatically, keeping the same safety
   checks.
 - **Library variables:** read variables from published Figma libraries, so aliases to them compare like
