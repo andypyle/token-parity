@@ -15,6 +15,7 @@ are relative to the config file, and command-line flags override it.
   "modes": { "dark": [".dark", "@variant dark"] },  // CSS selectors per mode; replaces the default
   "figmaCollection": "Primitives",                  // default collection for new single-mode variables
   "prefix": "ds",                                   // Tailwind prefix, if prefix(…) isn't in the code file
+  "ignore": ["animate-*", "dark/*", "color-amber-*:dark"], // left alone: CSS or Figma names, glob, optional :mode
   "nearThreshold": 0.005,                           // ΔE_OK below which colors count as rounding
   "rgbTolerance": 0.00196,
   "precision": { "l": 4, "c": 4, "h": 2 },
@@ -25,6 +26,9 @@ are relative to the config file, and command-line flags override it.
 - The default `modes` is `dark` ← `.dark`, `[data-theme="dark"]`, `@variant dark`. Code's `@theme`
   values are the first mode of each Figma collection (for example "Light").
 - Figma mode names are matched in lowercase kebab form: "Dark Mode" becomes `dark-mode`.
+- `ignore` patterns match a token's CSS name (no `--`) or its Figma name (`dark/fg-1`); `*` is any run of
+  characters. `name:mode` ignores only that mode. Ignored tokens are never reported, planned or written to
+  the lock, but aliases to them still resolve.
 - `.token-parity/` next to the lock holds the plan, change set and pending lock. It's temporary and
   should be gitignored.
 

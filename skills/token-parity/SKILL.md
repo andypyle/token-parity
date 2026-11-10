@@ -47,7 +47,9 @@ Write the config per `reference/config.md`; the export path must be committed. A
 ## Check
 
 Export, then `npx token-parity check`. Report drift by token with its suggested direction, and warnings
-(out-of-gamut is a warning, not drift). Offer to sync if there is drift.
+(out-of-gamut is a warning, not drift). Offer to sync if there is drift. If the user says some differences
+are intentional (code-only namespaces, Figma-only groups), offer `ignore` patterns (`reference/config.md`)
+and add them only with their yes.
 
 ## Sync
 

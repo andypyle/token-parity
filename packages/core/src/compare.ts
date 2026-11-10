@@ -8,6 +8,7 @@
 // - A code color outside Figma's gamut is a warning; comparisons against converted Figma values use the
 //   gamut-mapped code color so clamping never counts as drift.
 import { resolveAlias, type Literal } from "./alias.js";
+import { compileIgnore, type IgnoreMatcher } from "./ignore.js";
 import * as color from "./color.js";
 import {
   DEFAULT_MODE,
@@ -69,6 +70,8 @@ interface Ctx extends CompareInput {
   /** False when the lock's RGB was recorded in a different profile than the Figma file now uses. */
   lockRgbUsable: boolean;
   findings: Finding[];
+  ignore: IgnoreMatcher;
+  ignored: { tokens: number; modes: number };
 }
 
 export function compare(input: CompareInput): CompareResult {
@@ -82,21 +85,30 @@ export function compare(input: CompareInput): CompareResult {
       message: `Lock RGB values were recorded in ${input.lock!.figmaColorProfile} but the Figma file is ${profile}; every Figma color is treated as changed.`,
     });
   }
-  const ctx: Ctx = { ...input, profile, lockRgbUsable, findings: [] };
+  const ctx: Ctx = { ...input, profile, lockRgbUsable, findings: [], ignore: compileIgnore(input.settings.ignore), ignored: { tokens: 0, modes: 0 } };
 
   const keys = [...new Set([...input.figma.tokens.keys(), ...input.code.tokens.keys()])].sort();
   for (const key of keys) {
     const f = input.figma.tokens.get(key);
     const c = input.code.tokens.get(key);
     const l = input.lock?.tokens[key];
+    if (ctx.ignore.token(key, f, c)) {
+      ctx.ignored.tokens++;
+      continue;
+    }
     if (f && c) compareToken(ctx, f, c, l);
     else if (f) missingOnOneSide(ctx, "missing-in-code", f, l);
     else if (c) missingOnOneSide(ctx, "missing-in-figma", c, l);
   }
 
+  if (ctx.ignored.tokens + ctx.ignored.modes > 0) {
+    const parts = [ctx.ignored.tokens > 0 ? `${ctx.ignored.tokens} token${ctx.ignored.tokens === 1 ? "" : "s"}` : "", ctx.ignored.modes > 0 ? `${ctx.ignored.modes} mode value${ctx.ignored.modes === 1 ? "" : "s"}` : ""].filter(Boolean);
+    diagnostics.push({ level: "info", origin: "code", message: `Ignored ${parts.join(" and ")} per the \`ignore\` setting.` });
+  }
   const findings = dedupe(ctx.findings).sort(byTokenModeKind);
   const failing = new Set(findings.filter((f) => f.severity === "error").map((f) => f.token));
-  return { findings, tokensCompared: keys.length, inSync: keys.length - failing.size, diagnostics };
+  const compared = keys.length - ctx.ignored.tokens;
+  return { findings, tokensCompared: compared, inSync: compared - failing.size, diagnostics };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -165,6 +177,10 @@ function compareToken(ctx: Ctx, f: NormalizedToken, c: NormalizedToken, lock: Lo
   }
 
   for (const pair of pairModes(f, c)) {
+    if (ctx.ignore.mode(f.key, pair.mode, f, c)) {
+      ctx.ignored.modes++;
+      continue;
+    }
     const lockEntry = lock?.modes[pair.mode] ?? null;
     if (pair.figma && pair.code) {
       if (brokenF.has(pair.figmaMode) || brokenC.has(pair.codeMode)) continue;
@@ -257,7 +273,7 @@ function brokenAliases(ctx: Ctx, set: TokenSet, token: NormalizedToken, side: "f
   const broken = new Set<ModeName>();
   for (const mode of token.modes) {
     const value = token.values[mode]!;
-    if (value.kind !== "alias") continue;
+    if (value.kind !== "alias" || ctx.ignore.mode(token.key, mode, token)) continue;
     const r = resolveAlias(set, value, mode);
     let problem: "missing-target" | "cycle" | "type-mismatch" | null = null;
     let detail = "";

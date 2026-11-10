@@ -34,7 +34,8 @@ Figma bridge (used by the Claude Code skill with the Figma MCP's use_figma tool)
                                                  confirm a saved export matches what Figma returned
 
 Every command reads defaults from ./${CONFIG_FILE} (or --config <file>): figma, code, lock,
-resolutions, figmaCollection, modes, nearThreshold, rgbTolerance, precision, remBase.
+resolutions, figmaCollection, modes, prefix, ignore, nearThreshold, rgbTolerance,
+precision, remBase.
 Paths in it are relative to the config file. Flags override it.
 
 check options:
@@ -51,6 +52,8 @@ Comparison options (check, plan):
   --rgb-tolerance <n>      per-channel 0-1 tolerance vs locked RGB (default: 0.00196)
   --precision <l,c,h>      decimals when converting changed Figma RGB (default: 4,4,2)
   --rem-base <n>           px per rem (default: 16)
+  --ignore <pattern>       leave a token alone: CSS or Figma name, glob, optional :mode
+                           (e.g. animate-*, dark/*, color-amber-*:dark); repeatable
   --mode <name=selector>   CSS selector or at-rule for a mode; repeatable; replaces the
                            default (dark=.dark, dark=[data-theme="dark"], dark=@variant dark)
 
@@ -77,6 +80,7 @@ const COMPARE_OPTIONS = {
   precision: { type: "string" },
   "rem-base": { type: "string" },
   mode: { type: "string", multiple: true },
+  ignore: { type: "string", multiple: true },
 } as const satisfies ParseArgsConfig["options"];
 
 const OPTIONS = {
@@ -373,6 +377,8 @@ function settingsFrom(values: Values): Partial<CompareSettings> {
     }
     settings.precision = { l: parts[0]!, c: parts[1]!, h: parts[2]! };
   }
+
+  if (Array.isArray(values.ignore)) settings.ignore = values.ignore;
 
   if (Array.isArray(values.mode)) {
     const modeMap: Record<string, string[]> = {};

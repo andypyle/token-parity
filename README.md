@@ -104,6 +104,7 @@ asks three questions and writes the file for you.
 | `modes` | Optional. CSS selectors per mode, e.g. `{ "dark": [".dark"] }` (default: `.dark`, `[data-theme="dark"]`, `@variant dark`) |
 | `figmaCollection` | Optional. Default collection for new single-mode Figma variables |
 | `prefix` | Optional. Tailwind prefix, if `@import "tailwindcss" prefix(…)` isn't in the `code` file |
+| `ignore` | Optional. Tokens to leave alone, by CSS or Figma name: `["animate-*", "dark/*", "color-amber-*:dark"]`. `:mode` ignores just that mode |
 | `nearThreshold`, `rgbTolerance`, `precision`, `remBase` | Optional comparison settings (defaults: 0.005 ΔE, 0.5/255, `{l:4,c:4,h:2}`, 16px) |
 
 Paths are relative to the config file. Add `.token-parity/` to `.gitignore`; it holds temporary plan

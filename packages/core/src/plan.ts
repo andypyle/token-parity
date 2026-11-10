@@ -9,6 +9,7 @@ import { loadInputs, parseJson } from "./check.js";
 import { compare, lockMatches, pairModes, resolvedOr, type Pair } from "./compare.js";
 import { InputError } from "./errors.js";
 import { detectCodeSyntaxStyle, formatCodeSyntax } from "./code-syntax.js";
+import { compileIgnore, type IgnoreMatcher } from "./ignore.js";
 import { inferFigmaName } from "./naming.js";
 import {
   DEFAULT_MODE,
@@ -96,11 +97,13 @@ export async function plan(options: PlanOptions): Promise<Plan> {
   for (const f of findings) byToken.set(f.token, [...(byToken.get(f.token) ?? []), f]);
 
   const baseline = new Map<TokenKey, Record<ModeName, LockModeEntry>>();
+  const ignore = compileIgnore(settings.ignore);
   for (const key of [...new Set([...figma.tokens.keys(), ...code.tokens.keys()])].sort()) {
     const f = figma.tokens.get(key);
     const c = code.tokens.get(key);
+    if (ignore.token(key, f, c)) continue; // left alone: no actions, lock entries untouched
     const tokenFindings = (byToken.get(key) ?? []).filter((x) => x.kind !== "out-of-gamut");
-    if (f && c) collectBaseline(ctx, f, c, tokenFindings, baseline);
+    if (f && c) collectBaseline(ctx, f, c, tokenFindings, baseline, ignore);
     for (const finding of tokenFindings) handleFinding(ctx, finding, f, c);
   }
 
@@ -149,7 +152,14 @@ export async function readResolutions(path: string): Promise<Resolutions> {
 // ---------------------------------------------------------------------------------------------
 // Baseline: pairs already in sync keep (or gain) a lock entry
 
-function collectBaseline(ctx: Ctx, f: NormalizedToken, c: NormalizedToken, findings: Finding[], out: Map<TokenKey, Record<ModeName, LockModeEntry>>) {
+function collectBaseline(
+  ctx: Ctx,
+  f: NormalizedToken,
+  c: NormalizedToken,
+  findings: Finding[],
+  out: Map<TokenKey, Record<ModeName, LockModeEntry>>,
+  ignore: IgnoreMatcher,
+) {
   if (findings.some((x) => x.mode === null)) return; // whole-token problem: leave the lock alone
   const busy = new Set(findings.map((x) => x.mode));
   const lockToken = ctx.lock?.tokens[f.key];
@@ -157,6 +167,7 @@ function collectBaseline(ctx: Ctx, f: NormalizedToken, c: NormalizedToken, findi
 
   for (const pair of pairModes(f, c)) {
     if (busy.has(pair.mode) || busy.has(pair.figmaMode) || busy.has(pair.codeMode) || !pair.figma || !pair.code) continue;
+    if (ignore.mode(f.key, pair.mode, f, c)) continue;
     const existing = lockToken?.modes[pair.mode];
     if (existing && lockMatches(lockCtx, "figma", pair.figma, existing) && lockMatches(lockCtx, "code", pair.code, existing)) continue;
     const entry = entryFromSides(...comparable(ctx, pair));

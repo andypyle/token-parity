@@ -181,3 +181,11 @@ the name rule (`a/b/c` ↔ `--a-b-c`).
 - **Single-mode Figma vs code mode overrides.** A token in a single-mode Figma collection is compared on
   its default only. Each extra code mode is `missing-mode` ("Code defines a dark value, but Figma
   collection 'Primitives' has no dark mode"), which `plan` leaves for the user (`figma-mode-missing`).
+
+## Ignore list
+
+`ignore` (config, or `--ignore`) takes patterns matched against a token's CSS name or Figma variable name
+(`animate-*`, `dark/*`). `pattern:mode` ignores one mode only (`color-amber-*:dark`), for intentional
+code-only dark overrides of single-mode primitives. Ignored tokens and modes aren't compared, planned or
+written to the lock (existing lock entries are kept as they are). They stay in the token sets, so aliases
+to them still resolve. A check reports how many were ignored, as info.

@@ -21,6 +21,8 @@ export interface Config {
   remBase?: number;
   /** Tailwind prefix (`prefix(ds)` -> "ds"), when it isn't declared in the `code` file. */
   prefix?: string;
+  /** Tokens to leave alone: `animate-*`, `dark/*`, `color-amber-*:dark`. */
+  ignore?: string[];
 }
 
 const PATH_KEYS = ["figma", "code", "lock", "resolutions"] as const;
@@ -54,6 +56,9 @@ export function loadConfig(explicit: string | undefined, cwd = process.cwd()): C
     const ok = typeof config.modes === "object" && Object.values(config.modes).every((v) => Array.isArray(v) && v.every((s) => typeof s === "string"));
     if (!ok) fail('"modes" must map mode names to arrays of selectors, e.g. { "dark": [".dark"] }');
   }
+  if (config.ignore !== undefined && !(Array.isArray(config.ignore) && config.ignore.every((p) => typeof p === "string" && p.length > 0))) {
+    fail('"ignore" must be an array of patterns, e.g. ["animate-*", "dark/*", "color-amber-*:dark"]');
+  }
   if (config.precision !== undefined) {
     const p = config.precision;
     if (typeof p !== "object" || !["l", "c", "h"].every((k) => Number.isInteger((p as Record<string, unknown>)[k]))) fail('"precision" must be { "l": int, "c": int, "h": int }');
@@ -75,5 +80,6 @@ export function settingsFromConfig(config: Config): Partial<CompareSettings> {
   if (config.precision) s.precision = config.precision;
   if (config.remBase !== undefined) s.remBase = config.remBase;
   if (config.prefix !== undefined) s.prefix = config.prefix;
+  if (config.ignore !== undefined) s.ignore = config.ignore;
   return s;
 }

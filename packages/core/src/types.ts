@@ -147,6 +147,8 @@ export interface CompareSettings {
   modeMap: Record<ModeName, string[]>;
   /** Tailwind prefix, when the `@import "tailwindcss" prefix(…)` isn't in the code file. */
   prefix?: string;
+  /** Tokens to leave alone, by CSS or Figma name (`animate-*`, `dark/*`), optionally one mode (`color-amber-*:dark`). */
+  ignore?: string[];
 }
 
 export const DEFAULT_SETTINGS: CompareSettings = {
