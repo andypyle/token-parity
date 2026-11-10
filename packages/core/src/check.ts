@@ -47,7 +47,7 @@ export async function loadInputs(options: CheckOptions): Promise<LoadedInputs> {
   ]);
 
   const lock: LockFile | null = lockPath && lockText !== null ? parseLock(parseJson(lockText, lockPath), lockPath) : null;
-  const code = readTailwindCss(codeText, options.codePath, settings.modeMap, settings.prefix ?? null);
+  const code = readTailwindCss(codeText, options.codePath, settings.modeMap, settings.prefix ?? null, settings.colorFormat === "oklch");
   const figma = readFigmaExport(parseJson(figmaText, options.figmaPath), options.figmaPath, keysByVariableId(lock), new Set(code.tokens.keys()), code.tailwindPrefix ?? null);
   diagnostics.push(...renameDiagnostics(figma, lock));
 

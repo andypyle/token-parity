@@ -149,6 +149,11 @@ export interface CompareSettings {
   prefix?: string;
   /** Tokens to leave alone, by CSS or Figma name (`animate-*`, `dark/*`), optionally one mode (`color-amber-*:dark`). */
   ignore?: string[];
+  /**
+   * How apply writes colors into CSS. "preserve" keeps the format of the value being replaced, and new tokens
+   * use the file's majority format. Comparison is always in OKLCH whatever the format.
+   */
+  colorFormat?: "preserve" | "oklch" | "hex" | "rgb";
 }
 
 export const DEFAULT_SETTINGS: CompareSettings = {
@@ -157,6 +162,7 @@ export const DEFAULT_SETTINGS: CompareSettings = {
   precision: { l: 4, c: 4, h: 2 },
   remBase: 16,
   modeMap: { dark: [".dark", '[data-theme="dark"]', "@variant dark"] },
+  colorFormat: "preserve",
 };
 
 // ---------- Report ----------
@@ -249,6 +255,8 @@ export type FigmaValue =
 
 export interface ActionBase {
   id: string;
+  /** Anything about this action the user should know, e.g. a color written as oklch() because it is outside sRGB. */
+  note?: string;
   token: TokenKey;
   mode: ModeName | null;
   finding: string | null;

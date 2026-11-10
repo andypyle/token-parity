@@ -41,7 +41,14 @@ export { normalizeSelector };
  *   With a prefix, Tailwind emits `--x-color-…` at runtime, so mode overrides written with the prefixed name
  *   (`[data-theme="dark"] { --x-color-surface: … }`) count as overrides of the theme token `--color-surface`.
  */
-export function readTailwindCss(css: string, file: string, modeMap: Record<ModeName, string[]>, prefixOverride?: string | null): TokenSet {
+export function readTailwindCss(
+  css: string,
+  file: string,
+  modeMap: Record<ModeName, string[]>,
+  prefixOverride?: string | null,
+  /** Warn about colors not written as oklch() (only when `colorFormat` is "oklch"). */
+  requireOklch = false,
+): TokenSet {
   let root;
   try {
     root = postcss.parse(css, { from: file });
@@ -105,7 +112,7 @@ export function readTailwindCss(css: string, file: string, modeMap: Record<ModeN
     const locations: Record<ModeName, CodeLocation> = {};
     for (const mode of modes) {
       const d = perMode.get(mode)!;
-      values[mode] = parseValue(d.raw, key, diagnostics, unprefix);
+      values[mode] = parseValue(d.raw, key, requireOklch ? diagnostics : [], unprefix);
       locations[mode] = { cssVar: d.cssVar, context: d.context, line: d.line, selector: d.selector };
       allModes.add(mode);
     }
@@ -185,7 +192,7 @@ function parseValue(raw: string, key: string, diagnostics: Diagnostic[], unprefi
   const color = parseCssColor(raw);
   if (color) {
     if (!color.wasOklch) {
-      diagnostics.push({ level: "warning", origin: "code", token: key, message: `${raw} is not oklch(); OKLCH is the canonical color format.` });
+      diagnostics.push({ level: "warning", origin: "code", token: key, message: `${raw} is not oklch(), and colorFormat is "oklch".` });
     }
     return { kind: "color", color: color.color, raw };
   }

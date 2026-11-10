@@ -189,3 +189,16 @@ the name rule (`a/b/c` ↔ `--a-b-c`).
 code-only dark overrides of single-mode primitives. Ignored tokens and modes aren't compared, planned or
 written to the lock (existing lock entries are kept as they are). They stay in the token sets, so aliases
 to them still resolve. A check reports how many were ignored, as info.
+
+## Color format in code
+
+Colors are always compared in OKLCH. `colorFormat` only decides what `apply` writes into CSS:
+- **`"preserve"` (default).** A replaced value keeps its format and style: hex case, and legacy
+  `rgba(r, g, b, a)` vs modern `rgb(r g b / a)`. New tokens use the file's majority format; ties go to
+  oklch, then hex.
+- **`"oklch"`, `"hex"`, `"rgb"`.** Always that format.
+
+Hex and `rgb()` hold only sRGB. A Display P3 color inside sRGB is converted. One outside sRGB is written
+as `oklch()`, with a note on the plan action. The lock keeps OKLCH whatever is written: the text itself
+for `oklch()`, or a lossless OKLCH rendering of hex/rgb. So 8-bit rounding never shows up as drift. The
+"not oklch()" warning only appears under `"oklch"`.

@@ -16,6 +16,7 @@ are relative to the config file, and command-line flags override it.
   "figmaCollection": "Primitives",                  // default collection for new single-mode variables
   "prefix": "ds",                                   // Tailwind prefix, if prefix(…) isn't in the code file
   "ignore": ["animate-*", "dark/*", "color-amber-*:dark"], // left alone: CSS or Figma names, glob, optional :mode
+  "colorFormat": "preserve",                        // or "oklch" | "hex" | "rgb": how colors are written into CSS
   "nearThreshold": 0.005,                           // ΔE_OK below which colors count as rounding
   "rgbTolerance": 0.00196,
   "precision": { "l": 4, "c": 4, "h": 2 },

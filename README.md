@@ -37,7 +37,8 @@ against it:
 | same | changed | copy code → Figma |
 | changed | changed | **conflict**: you decide, it never auto-resolves |
 
-**Colors are compared as colors, not strings.** Code uses OKLCH; Figma stores RGB. Colors are compared by
+**Colors are compared as colors, not strings.** Code can use `oklch()`, hex or `rgb()`; Figma stores RGB.
+Colors are compared by
 perceptual distance (ΔE in OKLab). A tiny difference from hex rounding counts as a *near-match*, not drift.
 The lock keeps the original OKLCH next to the RGB written to Figma. While Figma's RGB is unchanged, the
 locked OKLCH is used as-is, so a color never slowly drifts from repeated conversion. A color that Figma's
@@ -104,6 +105,7 @@ asks three questions and writes the file for you.
 | `modes` | Optional. CSS selectors per mode, e.g. `{ "dark": [".dark"] }` (default: `.dark`, `[data-theme="dark"]`, `@variant dark`) |
 | `figmaCollection` | Optional. Default collection for new single-mode Figma variables |
 | `prefix` | Optional. Tailwind prefix, if `@import "tailwindcss" prefix(…)` isn't in the `code` file |
+| `colorFormat` | Optional. How colors are written into CSS: `"preserve"` (default: keep each value's format, new tokens use the file's usual one), `"oklch"`, `"hex"` or `"rgb"` |
 | `ignore` | Optional. Tokens to leave alone, by CSS or Figma name: `["animate-*", "dark/*", "color-amber-*:dark"]`. `:mode` ignores just that mode |
 | `nearThreshold`, `rgbTolerance`, `precision`, `remBase` | Optional comparison settings (defaults: 0.005 ΔE, 0.5/255, `{l:4,c:4,h:2}`, 16px) |
 

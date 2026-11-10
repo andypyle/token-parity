@@ -34,7 +34,7 @@ Figma bridge (used by the Claude Code skill with the Figma MCP's use_figma tool)
                                                  confirm a saved export matches what Figma returned
 
 Every command reads defaults from ./${CONFIG_FILE} (or --config <file>): figma, code, lock,
-resolutions, figmaCollection, modes, prefix, ignore, nearThreshold, rgbTolerance,
+resolutions, figmaCollection, modes, prefix, ignore, colorFormat, nearThreshold, rgbTolerance,
 precision, remBase.
 Paths in it are relative to the config file. Flags override it.
 
@@ -52,6 +52,8 @@ Comparison options (check, plan):
   --rgb-tolerance <n>      per-channel 0-1 tolerance vs locked RGB (default: 0.00196)
   --precision <l,c,h>      decimals when converting changed Figma RGB (default: 4,4,2)
   --rem-base <n>           px per rem (default: 16)
+  --color-format <f>       how plan writes colors into CSS: preserve (default; keep each value's
+                           format, new tokens use the file's usual one), oklch, hex or rgb
   --ignore <pattern>       leave a token alone: CSS or Figma name, glob, optional :mode
                            (e.g. animate-*, dark/*, color-amber-*:dark); repeatable
   --mode <name=selector>   CSS selector or at-rule for a mode; repeatable; replaces the
@@ -81,6 +83,7 @@ const COMPARE_OPTIONS = {
   "rem-base": { type: "string" },
   mode: { type: "string", multiple: true },
   ignore: { type: "string", multiple: true },
+  "color-format": { type: "string" },
 } as const satisfies ParseArgsConfig["options"];
 
 const OPTIONS = {
@@ -379,6 +382,11 @@ function settingsFrom(values: Values): Partial<CompareSettings> {
   }
 
   if (Array.isArray(values.ignore)) settings.ignore = values.ignore;
+  if (typeof values["color-format"] === "string") {
+    const f = values["color-format"];
+    if (f !== "preserve" && f !== "oklch" && f !== "hex" && f !== "rgb") throw new UsageError("--color-format must be preserve, oklch, hex or rgb");
+    settings.colorFormat = f;
+  }
 
   if (Array.isArray(values.mode)) {
     const modeMap: Record<string, string[]> = {};

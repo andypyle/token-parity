@@ -31,7 +31,7 @@ import {
   type Unresolved,
   type UnresolvedReason,
 } from "./types.js";
-import { codeTextFromFigma, entryFromSides, figmaValueFromCode, figmaValueOf, resolvedTypeOf } from "./values.js";
+import { codeTextFromFigma, entryFromSides, figmaValueFromCode, figmaValueOf, majorityColorFormat, resolvedTypeOf } from "./values.js";
 import { VERSION } from "./version.js";
 
 export interface PlanOptions {
@@ -70,6 +70,8 @@ interface Ctx {
   effects: Map<string, LockEffect>;
   unresolved: Unresolved[];
   skipped: string[];
+  /** The format the code file mostly writes colors in, for new tokens under colorFormat "preserve". */
+  fileColorFormat: "oklch" | "hex" | "rgb";
 }
 
 export async function plan(options: PlanOptions): Promise<Plan> {
@@ -90,6 +92,9 @@ export async function plan(options: PlanOptions): Promise<Plan> {
     effects: new Map(),
     unresolved: [],
     skipped: [],
+    fileColorFormat: majorityColorFormat(
+      [...code.tokens.values()].flatMap((t) => Object.values(t.values).flatMap((v) => (v.kind === "color" ? [v.raw] : []))),
+    ),
   };
 
   const { findings } = compare({ figma, code, lock, settings });
@@ -266,7 +271,7 @@ function copyValue(ctx: Ctx, finding: Finding, f: NormalizedToken, c: Normalized
     const loc = c.source.code!.modes[targetMode];
     if (!loc && targetMode !== DEFAULT_MODE && !ctx.settings.modeMap[targetMode]) return unresolve(ctx, finding, "no-code-mode-selector");
 
-    const converted = codeTextFromFigma(forCode(ctx, fv, pair.figmaMode), c.key, c.values[targetMode] ?? c.values[DEFAULT_MODE], ctx.settings);
+    const converted = codeTextFromFigma(forCode(ctx, fv, pair.figmaMode), c.key, c.values[targetMode] ?? c.values[DEFAULT_MODE], ctx.settings, ctx.fileColorFormat);
     if (!converted.ok) return unresolve(ctx, finding, fv.kind === "alias" ? "broken-alias" : "unsupported", converted.reason);
 
     push(
@@ -278,6 +283,7 @@ function copyValue(ctx: Ctx, finding: Finding, f: NormalizedToken, c: Normalized
         context: loc?.context ?? (targetMode === DEFAULT_MODE ? "theme" : `mode:${targetMode}`),
         from: loc ? (c.values[targetMode]?.raw ?? null) : null,
         to: converted.value,
+        ...(converted.note ? { note: converted.note } : {}),
       },
       finding,
       via,
@@ -331,6 +337,7 @@ function addCode(ctx: Ctx, finding: Finding, f: NormalizedToken, via: Via) {
     return unresolve(ctx, finding, "code-syntax-unmatched", f.source.figma.codeSyntax);
   }
   const single = f.modes.length === 1 && f.modes[0] === DEFAULT_MODE;
+  const notes: string[] = [];
   const values: Record<string, string> = {};
   const modes: Record<ModeName, LockModeEntry> = {};
   let type: LockToken["type"] = f.type;
@@ -338,7 +345,8 @@ function addCode(ctx: Ctx, finding: Finding, f: NormalizedToken, via: Via) {
   for (const [i, mode] of f.modes.entries()) {
     const codeMode = single || i === 0 ? DEFAULT_MODE : mode;
     if (codeMode !== DEFAULT_MODE && !ctx.settings.modeMap[codeMode]) return unresolve(ctx, finding, "no-code-mode-selector", `mode "${codeMode}"`);
-    const converted = codeTextFromFigma(forCode(ctx, f.values[mode]!, mode), cssKey, undefined, ctx.settings);
+    const converted = codeTextFromFigma(forCode(ctx, f.values[mode]!, mode), cssKey, undefined, ctx.settings, ctx.fileColorFormat);
+    if (converted.ok && converted.note) notes.push(`${mode}: ${converted.note}`);
     if (!converted.ok) return unresolve(ctx, finding, f.values[mode]!.kind === "alias" ? "broken-alias" : "unsupported", converted.reason);
     values[codeMode === DEFAULT_MODE ? "theme" : `mode:${codeMode}`] = converted.value;
     modes[mode] = converted.lock;
@@ -347,7 +355,7 @@ function addCode(ctx: Ctx, finding: Finding, f: NormalizedToken, via: Via) {
   const prefix = ctx.code.tailwindPrefix;
   push(
     ctx,
-    { op: "add-code", cssVar: `--${cssKey}`, values, ...(prefix ? { modeCssVar: `--${prefix}-${cssKey}` } : {}) },
+    { op: "add-code", cssVar: `--${cssKey}`, values, ...(prefix ? { modeCssVar: `--${prefix}-${cssKey}` } : {}), ...(notes.length ? { note: notes.join("; ") } : {}) },
     finding,
     via,
     null,

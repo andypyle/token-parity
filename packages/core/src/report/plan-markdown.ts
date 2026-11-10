@@ -42,7 +42,9 @@ export function renderPlanMarkdown(plan: Plan): string {
   );
   if (plan.actions.length > 0) {
     lines.push("## Actions", "", "| Token | Mode | Changes | Why | What |", "| --- | --- | --- | --- | --- |");
-    for (const a of plan.actions) lines.push(`| ${code(a.token)} | ${a.mode ?? "all"} | ${SIDE[a.op]} | ${a.via} | ${cell(describeAction(a))} |`);
+    for (const a of plan.actions) {
+      lines.push(`| ${code(a.token)} | ${a.mode ?? "all"} | ${SIDE[a.op]} | ${a.via} | ${cell(describeAction(a) + (a.note ? ` (note: ${a.note})` : ""))} |`);
+    }
     lines.push("");
   }
   if (plan.unresolved.length > 0) {

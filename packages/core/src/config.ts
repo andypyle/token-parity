@@ -23,6 +23,8 @@ export interface Config {
   prefix?: string;
   /** Tokens to leave alone: `animate-*`, `dark/*`, `color-amber-*:dark`. */
   ignore?: string[];
+  /** How colors are written into CSS: "preserve" (default), "oklch", "hex" or "rgb". */
+  colorFormat?: "preserve" | "oklch" | "hex" | "rgb";
 }
 
 const PATH_KEYS = ["figma", "code", "lock", "resolutions"] as const;
@@ -59,6 +61,9 @@ export function loadConfig(explicit: string | undefined, cwd = process.cwd()): C
   if (config.ignore !== undefined && !(Array.isArray(config.ignore) && config.ignore.every((p) => typeof p === "string" && p.length > 0))) {
     fail('"ignore" must be an array of patterns, e.g. ["animate-*", "dark/*", "color-amber-*:dark"]');
   }
+  if (config.colorFormat !== undefined && !["preserve", "oklch", "hex", "rgb"].includes(config.colorFormat)) {
+    fail('"colorFormat" must be "preserve", "oklch", "hex" or "rgb"');
+  }
   if (config.precision !== undefined) {
     const p = config.precision;
     if (typeof p !== "object" || !["l", "c", "h"].every((k) => Number.isInteger((p as Record<string, unknown>)[k]))) fail('"precision" must be { "l": int, "c": int, "h": int }');
@@ -81,5 +86,6 @@ export function settingsFromConfig(config: Config): Partial<CompareSettings> {
   if (config.remBase !== undefined) s.remBase = config.remBase;
   if (config.prefix !== undefined) s.prefix = config.prefix;
   if (config.ignore !== undefined) s.ignore = config.ignore;
+  if (config.colorFormat !== undefined) s.colorFormat = config.colorFormat;
   return s;
 }

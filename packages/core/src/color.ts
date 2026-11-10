@@ -80,6 +80,13 @@ export function rgbaToOklch(rgba: Rgba, profile: ColorProfile): OklchColor {
   return fromCulori(toOklch({ mode: culoriMode(profile), r: rgba.r, g: rgba.g, b: rgba.b, alpha: rgba.a }));
 }
 
+/** Convert Display P3 channels to sRGB; null when the color is outside sRGB. */
+export function toSrgb(c: RgbColor): RgbColor | null {
+  const s = toRgb(rgbToCulori(c));
+  const inside = [s.r, s.g, s.b].every((v) => v >= -GAMUT_EPSILON && v <= 1 + GAMUT_EPSILON);
+  return inside ? { space: "srgb", r: s.r, g: s.g, b: s.b, alpha: c.alpha } : null;
+}
+
 /** True when every channel (and alpha) differs by at most `tolerance`. */
 export function rgbClose(a: RgbColor, b: Rgba, tolerance: number): boolean {
   return (

@@ -1,0 +1,16 @@
+{
+  "colorProfile": "srgb",
+  "variableCollections": {
+    "VC:1": { "id": "VC:1", "name": "Primitives", "modes": [{ "modeId": "1:0", "name": "Value" }], "defaultModeId": "1:0" }
+  },
+  "variables": {
+    "V:1": { "id": "V:1", "name": "color/bg", "resolvedType": "COLOR", "variableCollectionId": "VC:1",
+             "valuesByMode": { "1:0": { "r": 0.093799, "g": 0.093792, "b": 0.105831, "a": 1 } } },
+    "V:2": { "id": "V:2", "name": "color/brand", "resolvedType": "COLOR", "variableCollectionId": "VC:1",
+             "valuesByMode": { "1:0": { "r": 0.534875, "g": 0.2618, "b": 0.860658, "a": 1 } } },
+    "V:3": { "id": "V:3", "name": "color/overlay", "resolvedType": "COLOR", "variableCollectionId": "VC:1",
+             "valuesByMode": { "1:0": { "r": 0.0196, "g": 0.0275, "b": 0.0353, "a": 0.6 } } },
+    "V:4": { "id": "V:4", "name": "color/new", "resolvedType": "COLOR", "variableCollectionId": "VC:1",
+             "valuesByMode": { "1:0": { "r": 0.980256, "g": 0.980256, "b": 0.980256, "a": 1 } } }
+  }
+}

@@ -142,7 +142,10 @@ describe("tailwind adapter", () => {
       raw: "oklch(0.62 0.19 259.8)",
     });
     expect(set.tokens.get("color-red")!.type).toBe("color");
-    expect(set.diagnostics.some((d) => d.token === "color-red" && d.level === "warning")).toBe(true);
+    // Non-OKLCH colors are fine unless colorFormat is "oklch".
+    expect(set.diagnostics.some((d) => d.token === "color-red")).toBe(false);
+    const strict = readTailwindCss(css, "theme.css", modeMap, null, true);
+    expect(strict.diagnostics.some((d) => d.token === "color-red" && d.level === "warning")).toBe(true);
   });
 
   it("collects mode overrides from .dark, [data-theme=dark] and @variant dark", () => {
