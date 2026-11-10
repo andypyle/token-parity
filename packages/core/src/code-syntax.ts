@@ -1,15 +1,29 @@
 // Figma's codeSyntax.WEB is free text written by designers. This turns it into a token key.
 //
-// - `var(--x)` and `--x` name a CSS custom property explicitly: they map to `x` directly, even if code doesn't
-//   have it yet (that is then a real missing-in-code).
-// - Every other form (Tailwind utilities, Sass/Less variables, camelCase, dotted JS paths, bare names) yields
-//   candidate keys, and matches only when exactly one candidate exists in code. Nothing is guessed.
+// - Only an exact `var(--name)` (optionally with a fallback argument) or a bare `--name` gives a name. The
+//   Tailwind prefix is stripped (`var(--ds-color-x)` -> `color-x` with `prefix(ds)`). A name that isn't in
+//   code doesn't count: the variable falls back to name matching, with a warning.
+// - Identifier-shaped forms (Tailwind utilities, Sass/Less variables, camelCase, dotted JS paths) only yield
+//   candidates, and match when exactly one candidate exists in code.
+// - Anything else (`calc(...)`, `2px`, arbitrary `bg-[#fff]`) is not a name; the variable is matched by name.
 
 export type CodeSyntaxResult =
-  | { ok: true; key: string; direct: boolean }
-  | { ok: false; problem: "no-match" | "ambiguous" | "arbitrary-value"; candidates: string[] };
+  | { ok: true; key: string; via: "var" | "candidate" }
+  | { ok: false; problem: "var-not-in-code" | "not-a-name" | "no-match" | "ambiguous"; tried: string[] };
 
 type FigmaType = "COLOR" | "FLOAT" | "STRING" | "BOOLEAN";
+
+const VAR_RE = /^var\(\s*--([A-Za-z0-9_-]+)\s*(?:,[^)]*)?\)$/;
+const PROPERTY_RE = /^--([A-Za-z0-9_-]+)$/;
+const IDENTIFIER_RE = /^[$@]?[A-Za-z][A-Za-z0-9_.-]*$/;
+
+/** The custom property an exact `var(--x)` / `--x` names, without the Tailwind prefix; null for any other form. */
+export function codeSyntaxVarName(raw: string, prefix?: string | null): string | null {
+  const text = raw.trim();
+  const name = VAR_RE.exec(text)?.[1] ?? PROPERTY_RE.exec(text)?.[1];
+  if (!name) return null;
+  return prefix && name.startsWith(`${prefix}-`) ? name.slice(prefix.length + 1) : name;
+}
 
 // Tailwind v4 utility prefixes -> theme namespace, by variable type. Longest prefixes are tried first.
 const COLOR_UTILITIES = [
@@ -51,19 +65,14 @@ const kebab = (s: string) =>
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
 
-/** Candidate token keys for a codeSyntax.WEB value; `direct` when it explicitly names a custom property. */
-export function codeSyntaxCandidates(raw: string, type: FigmaType): { direct: string | null; candidates: string[]; arbitrary: boolean } {
-  let text = raw.trim();
-  const varMatch = /^var\(\s*--([^,)\s]+)\s*(?:,[^)]*)?\)$/.exec(text);
-  if (varMatch) return { direct: varMatch[1]!, candidates: [], arbitrary: false };
-  if (/^--[^\s]+$/.test(text)) return { direct: text.slice(2), candidates: [], arbitrary: false };
-
-  text = text.replace(/^(?:[a-z0-9-]+:)+/i, "").replace(/^!|!$/g, ""); // Tailwind variants (dark:, hover:) and !important
-  if (/\[.*\]/.test(text)) return { direct: null, candidates: [], arbitrary: true };
+/** Candidate token keys for an identifier-shaped codeSyntax.WEB value (null when it isn't one). */
+export function codeSyntaxCandidates(raw: string, type: FigmaType): string[] | null {
+  // Tailwind variants (dark:, hover:, and a v4 prefix like ds:) and !important
+  let text = raw.trim().replace(/^(?:[A-Za-z0-9-]+:)+/, "").replace(/^!|!$/g, "");
+  if (!IDENTIFIER_RE.test(text)) return null;
 
   const out = new Set<string>();
   const add = (k: string) => k && out.add(k);
-
   if (/^[$@]/.test(text)) text = text.slice(1); // Sass $x, Less @x
 
   if (text.includes(".")) {
@@ -87,17 +96,24 @@ export function codeSyntaxCandidates(raw: string, type: FigmaType): { direct: st
       }
     }
   }
-  return { direct: null, candidates: [...out], arbitrary: false };
+  return [...out];
 }
 
-/** Resolve codeSyntax.WEB against the token keys that exist in code. */
-export function resolveCodeSyntax(raw: string, type: FigmaType, codeKeys: ReadonlySet<string>): CodeSyntaxResult {
-  const { direct, candidates, arbitrary } = codeSyntaxCandidates(raw, type);
-  if (direct) return { ok: true, key: direct, direct: true };
-  if (arbitrary) return { ok: false, problem: "arbitrary-value", candidates: [] };
+/**
+ * Resolve codeSyntax.WEB against the token keys that exist in code. Without `codeKeys`, only an exact var
+ * name is used (unverified), since nothing can be checked.
+ */
+export function resolveCodeSyntax(raw: string, type: FigmaType, codeKeys: ReadonlySet<string> | undefined, prefix?: string | null): CodeSyntaxResult {
+  const name = codeSyntaxVarName(raw, prefix);
+  if (name !== null) {
+    if (!codeKeys || codeKeys.has(name)) return { ok: true, key: name, via: "var" };
+    return { ok: false, problem: "var-not-in-code", tried: [name] };
+  }
+  const candidates = codeSyntaxCandidates(raw, type);
+  if (!candidates || !codeKeys) return { ok: false, problem: "not-a-name", tried: [] };
   const present = candidates.filter((c) => codeKeys.has(c));
-  if (present.length === 1) return { ok: true, key: present[0]!, direct: false };
-  return { ok: false, problem: present.length > 1 ? "ambiguous" : "no-match", candidates: present.length > 1 ? present : candidates };
+  if (present.length === 1) return { ok: true, key: present[0]!, via: "candidate" };
+  return { ok: false, problem: present.length > 1 ? "ambiguous" : "no-match", tried: present.length > 1 ? present : candidates };
 }
 
 export type CodeSyntaxStyle = "var" | "property" | "bare";
@@ -115,6 +131,8 @@ export function detectCodeSyntaxStyle(values: Iterable<string>): CodeSyntaxStyle
   return best[1] > 0 ? best[0] : "var";
 }
 
-export function formatCodeSyntax(key: string, style: CodeSyntaxStyle): string {
-  return style === "var" ? `var(--${key})` : style === "property" ? `--${key}` : key;
+/** codeSyntax.WEB for a token, with the Tailwind prefix Tailwind adds at runtime (`var(--ds-color-x)`). */
+export function formatCodeSyntax(key: string, style: CodeSyntaxStyle, prefix?: string | null): string {
+  const name = prefix ? `${prefix}-${key}` : key;
+  return style === "var" ? `var(--${name})` : style === "property" ? `--${name}` : name;
 }

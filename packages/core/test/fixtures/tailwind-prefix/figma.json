@@ -1,0 +1,20 @@
+{
+  "colorProfile": "srgb",
+  "variableCollections": {
+    "P": { "id": "P", "name": "Primitives", "modes": [{ "modeId": "p", "name": "Value" }], "defaultModeId": "p" },
+    "D": { "id": "D", "name": "Dimension", "modes": [{ "modeId": "d", "name": "Value" }], "defaultModeId": "d" },
+    "C": { "id": "C", "name": "Color", "modes": [{ "modeId": "l", "name": "Light" }, { "modeId": "k", "name": "Dark" }], "defaultModeId": "l" }
+  },
+  "variables": {
+    "V1": { "id": "V1", "name": "slate/50", "resolvedType": "COLOR", "variableCollectionId": "P", "codeSyntax": { "WEB": "var(--ds-color-slate-50)" },
+            "valuesByMode": { "p": { "r": 0.980256, "g": 0.980256, "b": 0.980256, "a": 1 } } },
+    "V2": { "id": "V2", "name": "text/xs", "resolvedType": "FLOAT", "variableCollectionId": "D", "codeSyntax": { "WEB": "var(--ds-text-xs)" },
+            "valuesByMode": { "d": 12 } },
+    "V3": { "id": "V3", "name": "spacing/1", "resolvedType": "FLOAT", "variableCollectionId": "D", "codeSyntax": { "WEB": "calc(var(--ds-spacing) * 1)" },
+            "valuesByMode": { "d": 4 } },
+    "V4": { "id": "V4", "name": "border/2", "resolvedType": "FLOAT", "variableCollectionId": "D", "codeSyntax": { "WEB": "2px" },
+            "valuesByMode": { "d": 2 } },
+    "V5": { "id": "V5", "name": "surface", "resolvedType": "COLOR", "variableCollectionId": "C", "codeSyntax": { "WEB": "var(--ds-color-surface)" },
+            "valuesByMode": { "l": { "type": "VARIABLE_ALIAS", "id": "V1" }, "k": { "r": 0.093799, "g": 0.093792, "b": 0.105831, "a": 1 } } }
+  }
+}

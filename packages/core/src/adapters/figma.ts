@@ -2,7 +2,7 @@
 // The input mirrors the shape of Figma's REST `variables/local` response and the Plugin API,
 // plus a top-level `colorProfile` ("srgb" | "display-p3"). Colors stay RGB here; compare decides
 // whether to use the locked OKLCH or convert.
-import { resolveCodeSyntax } from "../code-syntax.js";
+import { codeSyntaxVarName, resolveCodeSyntax } from "../code-syntax.js";
 import { formatRgb } from "../color.js";
 import { InputError } from "../errors.js";
 import {
@@ -78,6 +78,7 @@ export function readFigmaExport(
   file: string,
   keyByVariableId: ReadonlyMap<string, string> = new Map(),
   codeKeys?: ReadonlySet<string>,
+  tailwindPrefix?: string | null,
 ): TokenSet {
   if (!isObject(input)) throw new InputError("expected a JSON object", file);
   if (input.format !== undefined) input = expandCompactExport(input, file);
@@ -110,8 +111,17 @@ export function readFigmaExport(
     }
     return raw as unknown as FigmaVariable;
   });
-  const unmatched = new Set<string>();
-  const keys = new Map(vars.map((v) => [v.id, variableKey(v, keyByVariableId, codeKeys, diagnostics, unmatched)]));
+  const match: KeyMatching = { lockKeys: keyByVariableId, codeKeys, prefix: tailwindPrefix ?? null, diagnostics, unmatched: new Set(), notNames: [] };
+  const keys = new Map(vars.map((v) => [v.id, variableKey(v, match)]));
+  if (codeKeys && match.notNames.length > 0) {
+    const examples = match.notNames.slice(0, 3).map((n) => `"${n}"`).join(", ");
+    diagnostics.push({
+      level: "info",
+      origin: "figma",
+      message: `${match.notNames.length} variable${match.notNames.length === 1 ? "'s" : "s'"} codeSyntax.WEB doesn't name a CSS token (e.g. ${examples}); matched by name instead.`,
+    });
+  }
+  const unmatched = match.unmatched;
   const keyOf = (v: FigmaVariable) => keys.get(v.id)!;
   const byId = new Map(vars.map((v) => [v.id, { key: keyOf(v), name: v.name }]));
 
@@ -168,6 +178,7 @@ export function readFigmaExport(
           ...(Array.isArray(v.scopes) ? { scopes: v.scopes } : {}),
           ...(typeof v.codeSyntax?.WEB === "string" ? { codeSyntax: v.codeSyntax.WEB } : {}),
           ...(unmatched.has(v.id) ? { codeSyntaxUnmatched: true } : {}),
+          ...(codeSyntaxVarName(v.codeSyntax?.WEB ?? "", tailwindPrefix) ? { codeSyntaxVar: codeSyntaxVarName(v.codeSyntax!.WEB!, tailwindPrefix)! } : {}),
         },
       },
     });
@@ -176,36 +187,46 @@ export function readFigmaExport(
   return { origin: "figma", colorProfile: profile, figmaCollections, modes: [...allModes], tokens, diagnostics };
 }
 
-function variableKey(
-  v: FigmaVariable,
-  lockKeys: ReadonlyMap<string, string>,
-  codeKeys: ReadonlySet<string> | undefined,
-  diagnostics: Diagnostic[],
-  unmatched: Set<string>,
-): string {
-  const lockKey = lockKeys.get(v.id);
+interface KeyMatching {
+  lockKeys: ReadonlyMap<string, string>;
+  codeKeys: ReadonlySet<string> | undefined;
+  prefix: string | null;
+  diagnostics: Diagnostic[];
+  /** Identifier-shaped codeSyntax that matched nothing: plan must not invent a CSS name for these. */
+  unmatched: Set<string>;
+  /** codeSyntax values that aren't names at all (calc(...), 2px, ...), reported once as info. */
+  notNames: string[];
+}
+
+function variableKey(v: FigmaVariable, m: KeyMatching): string {
+  const lockKey = m.lockKeys.get(v.id);
   const fallback = lockKey ?? figmaNameToKey(v.name);
   const web = v.codeSyntax?.WEB?.trim();
   if (!web) return fallback;
 
-  const r = resolveCodeSyntax(web, v.resolvedType, codeKeys ?? new Set());
-  if (!r.ok) {
-    if (codeKeys) {
-      unmatched.add(v.id);
-      const why =
-        r.problem === "arbitrary-value"
-          ? "is an arbitrary value, which has no token"
-          : r.problem === "ambiguous"
-            ? `matches several tokens in code (${r.candidates.map((c) => `--${c}`).join(", ")})`
-            : `matches no token in code (tried ${r.candidates.map((c) => `--${c}`).join(", ") || "nothing"})`;
-      diagnostics.push({ level: "warning", origin: "figma", token: fallback, message: `"${v.name}" codeSyntax.WEB "${web}" ${why}; matched by name instead.` });
+  const r = resolveCodeSyntax(web, v.resolvedType, m.codeKeys, m.prefix);
+  if (r.ok) {
+    if (lockKey && lockKey !== r.key) {
+      m.diagnostics.push({ level: "info", origin: "figma", token: r.key, message: `"${v.name}" now maps to --${r.key} through its codeSyntax (was --${lockKey}).` });
     }
-    return fallback;
+    return r.key;
   }
-  if (lockKey && lockKey !== r.key) {
-    diagnostics.push({ level: "info", origin: "figma", token: r.key, message: `"${v.name}" now maps to --${r.key} through its codeSyntax (was --${lockKey}).` });
+  if (!m.codeKeys) return fallback; // nothing to check against yet
+
+  if (r.problem === "var-not-in-code") {
+    m.diagnostics.push({
+      level: "warning",
+      origin: "figma",
+      token: fallback,
+      message: `"${v.name}" codeSyntax.WEB "${web}" names --${r.tried[0]}, which isn't in code; matched by name (--${fallback}) instead.`,
+    });
+  } else if (r.problem === "not-a-name") {
+    m.notNames.push(`${v.name}: ${web}`);
+  } else {
+    m.unmatched.add(v.id);
+    m.notNames.push(`${v.name}: ${web}`);
   }
-  return r.key;
+  return fallback;
 }
 
 function orderModes(c: FigmaCollection): FigmaMode[] {

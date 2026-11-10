@@ -14,6 +14,7 @@ are relative to the config file, and command-line flags override it.
   // Optional:
   "modes": { "dark": [".dark", "@variant dark"] },  // CSS selectors per mode; replaces the default
   "figmaCollection": "Primitives",                  // default collection for new single-mode variables
+  "prefix": "ds",                                   // Tailwind prefix, if prefix(…) isn't in the code file
   "nearThreshold": 0.005,                           // ΔE_OK below which colors count as rounding
   "rgbTolerance": 0.00196,
   "precision": { "l": 4, "c": 4, "h": 2 },

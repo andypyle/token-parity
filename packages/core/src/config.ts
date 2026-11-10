@@ -19,6 +19,8 @@ export interface Config {
   rgbTolerance?: number;
   precision?: { l: number; c: number; h: number };
   remBase?: number;
+  /** Tailwind prefix (`prefix(ds)` -> "ds"), when it isn't declared in the `code` file. */
+  prefix?: string;
 }
 
 const PATH_KEYS = ["figma", "code", "lock", "resolutions"] as const;
@@ -42,7 +44,7 @@ export function loadConfig(explicit: string | undefined, cwd = process.cwd()): C
   const fail = (msg: string) => {
     throw new InputError(msg, path);
   };
-  for (const key of [...PATH_KEYS, "figmaFile", "figmaCollection"] as const) {
+  for (const key of [...PATH_KEYS, "figmaFile", "figmaCollection", "prefix"] as const) {
     if (config[key] !== undefined && typeof config[key] !== "string") fail(`"${key}" must be a string`);
   }
   for (const key of ["nearThreshold", "rgbTolerance", "remBase"] as const) {
@@ -72,5 +74,6 @@ export function settingsFromConfig(config: Config): Partial<CompareSettings> {
   if (config.rgbTolerance !== undefined) s.rgbTolerance = config.rgbTolerance;
   if (config.precision) s.precision = config.precision;
   if (config.remBase !== undefined) s.remBase = config.remBase;
+  if (config.prefix !== undefined) s.prefix = config.prefix;
   return s;
 }

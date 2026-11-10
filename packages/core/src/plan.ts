@@ -261,7 +261,8 @@ function copyValue(ctx: Ctx, finding: Finding, f: NormalizedToken, c: Normalized
       ctx,
       {
         op: "update-code",
-        cssVar: loc?.cssVar ?? c.source.code!.cssVar,
+        // A new mode override uses the name Tailwind emits at runtime (prefixed), or it would have no effect.
+        cssVar: loc?.cssVar ?? (targetMode !== DEFAULT_MODE && ctx.code.tailwindPrefix ? `--${ctx.code.tailwindPrefix}-${c.key}` : c.source.code!.cssVar),
         context: loc?.context ?? (targetMode === DEFAULT_MODE ? "theme" : `mode:${targetMode}`),
         from: loc ? (c.values[targetMode]?.raw ?? null) : null,
         to: converted.value,
@@ -311,8 +312,12 @@ function toFigma(ctx: Ctx, cv: NormalizedToken["values"][string], type: Normaliz
 }
 
 function addCode(ctx: Ctx, finding: Finding, f: NormalizedToken, via: Via) {
-  // The designer named its CSS token in codeSyntax, but no such token resolved: don't invent a name.
-  if (f.source.figma?.codeSyntaxUnmatched) return unresolve(ctx, finding, "code-syntax-unmatched", f.source.figma.codeSyntax);
+  // An exact var(--x) codeSyntax names the CSS token, so add it under that name. An identifier-shaped
+  // codeSyntax that matched nothing gives no reliable name: ask instead of inventing one.
+  const cssKey = f.source.figma?.codeSyntaxVar ?? f.key;
+  if (!f.source.figma?.codeSyntaxVar && f.source.figma?.codeSyntaxUnmatched) {
+    return unresolve(ctx, finding, "code-syntax-unmatched", f.source.figma.codeSyntax);
+  }
   const single = f.modes.length === 1 && f.modes[0] === DEFAULT_MODE;
   const values: Record<string, string> = {};
   const modes: Record<ModeName, LockModeEntry> = {};
@@ -321,13 +326,21 @@ function addCode(ctx: Ctx, finding: Finding, f: NormalizedToken, via: Via) {
   for (const [i, mode] of f.modes.entries()) {
     const codeMode = single || i === 0 ? DEFAULT_MODE : mode;
     if (codeMode !== DEFAULT_MODE && !ctx.settings.modeMap[codeMode]) return unresolve(ctx, finding, "no-code-mode-selector", `mode "${codeMode}"`);
-    const converted = codeTextFromFigma(f.values[mode]!, f.key, undefined, ctx.settings);
+    const converted = codeTextFromFigma(f.values[mode]!, cssKey, undefined, ctx.settings);
     if (!converted.ok) return unresolve(ctx, finding, f.values[mode]!.kind === "alias" ? "broken-alias" : "unsupported", converted.reason);
     values[codeMode === DEFAULT_MODE ? "theme" : `mode:${codeMode}`] = converted.value;
     modes[mode] = converted.lock;
     if (/px$/.test(converted.value)) type = "dimension";
   }
-  push(ctx, { op: "add-code", cssVar: `--${f.key}`, values }, finding, via, null, { token: f.key, type, modes });
+  const prefix = ctx.code.tailwindPrefix;
+  push(
+    ctx,
+    { op: "add-code", cssVar: `--${cssKey}`, values, ...(prefix ? { modeCssVar: `--${prefix}-${cssKey}` } : {}) },
+    finding,
+    via,
+    null,
+    { token: cssKey, type, modes },
+  );
 }
 
 function addFigma(ctx: Ctx, finding: Finding, c: NormalizedToken, via: Via) {
@@ -362,7 +375,7 @@ function addFigma(ctx: Ctx, finding: Finding, c: NormalizedToken, via: Via) {
       naming: explicit ? { source: "explicit" } : { source: "inferred", sibling: inferred!.sibling },
       scopes: scopes.scopes,
       scopesFrom: scopes.from,
-      codeSyntax: formatCodeSyntax(c.key, detectCodeSyntaxStyle(codeSyntaxValues(ctx.figma))),
+      codeSyntax: formatCodeSyntax(c.key, detectCodeSyntaxStyle(codeSyntaxValues(ctx.figma)), ctx.code.tailwindPrefix),
     },
     finding,
     via,
@@ -438,7 +451,8 @@ function deleteFigma(ctx: Ctx, finding: Finding, f: NormalizedToken, via: Via) {
 }
 
 function deleteCode(ctx: Ctx, finding: Finding, c: NormalizedToken, via: Via) {
-  push(ctx, { op: "delete-code", cssVar: c.source.code!.cssVar, destructive: true }, finding, via, null, null);
+  const prefix = ctx.code.tailwindPrefix;
+  push(ctx, { op: "delete-code", cssVar: c.source.code!.cssVar, ...(prefix ? { modeCssVar: `--${prefix}-${c.key}` } : {}), destructive: true }, finding, via, null, null);
 }
 
 // ---------------------------------------------------------------------------------------------

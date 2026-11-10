@@ -145,14 +145,21 @@ A Figma variable's `codeSyntax.WEB` is the designer's own record of its name in 
 strongest matching signal. Keys come from, in order: `codeSyntax.WEB`, then the lock's variable ID, then
 the name rule (`a/b/c` ↔ `--a-b-c`).
 
-- **Direct forms.** `var(--x)` and `--x` map to `x` even when code lacks it, which is then a real
-  `missing-in-code`.
-- **Other forms.** Tailwind utilities (the prefix maps to a namespace, and the variable's type tells
-  `text-` color from font size), Sass `$x`, Less `@x`, camelCase and dotted JS paths only produce
-  candidates. They match when exactly one candidate exists in code; otherwise a warning says what was
-  tried, and the variable falls back to its name. Arbitrary values (`bg-[#fff]`) never match.
-- **Unmatched variables.** If such a variable is missing in code, `plan` reports it
-  (`code-syntax-unmatched`) instead of adding a CSS token under a guessed name.
+- **Names come from an exact `var(--x)`** (with an optional fallback argument) or a bare `--x`, after
+  stripping the Tailwind prefix. The prefix comes from `@import "tailwindcss" prefix(ds)` or the
+  config's `prefix`. The name counts only if code has it. Otherwise there's a warning and the variable
+  falls back to its name. If it is then missing in code, `plan` adds it under the `var()` name, which
+  is the designer's choice.
+- **Identifier-shaped forms.** Tailwind utilities (the prefix maps to a namespace, and the variable's
+  type tells `text-` color from font size), Sass `$x`, Less `@x`, camelCase and dotted JS paths only
+  produce candidates. They match when exactly one exists in code. If none matches, `plan` asks
+  (`code-syntax-unmatched`) instead of guessing a CSS name.
+- **Anything else is not a name.** Expressions (`calc(var(--ds-spacing) * 4)`), literals (`2px`) and
+  arbitrary values (`bg-[#fff]`) fall back to the name, with one combined info note per check instead
+  of a warning each.
+- **Prefixed runtime names.** With a prefix, Tailwind emits `--ds-…`. Mode overrides written with that
+  name (`[data-theme="dark"] { --ds-color-surface: … }`) are overrides of `--color-surface`. New
+  overrides and new Figma code syntax are written with the prefix.
 - **Remaps.** A `codeSyntax` that resolves to a different key than the lock records is reported as info.
   Two variables resolving to one key is an error.
 - **New variables.** Variables created from code get `codeSyntax.WEB` set in the file's majority direct

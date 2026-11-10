@@ -36,7 +36,12 @@ const normalizeSelector = (s: string) => s.replace(/\s+/g, " ").replace(/["']/g,
 
 export { normalizeSelector };
 
-export function readTailwindCss(css: string, file: string, modeMap: Record<ModeName, string[]>): TokenSet {
+/**
+ * @param prefixOverride Tailwind prefix from config. Otherwise it is read from `@import "tailwindcss" prefix(x)`.
+ *   With a prefix, Tailwind emits `--x-color-…` at runtime, so mode overrides written with the prefixed name
+ *   (`[data-theme="dark"] { --x-color-surface: … }`) count as overrides of the theme token `--color-surface`.
+ */
+export function readTailwindCss(css: string, file: string, modeMap: Record<ModeName, string[]>, prefixOverride?: string | null): TokenSet {
   let root;
   try {
     root = postcss.parse(css, { from: file });
@@ -45,6 +50,7 @@ export function readTailwindCss(css: string, file: string, modeMap: Record<ModeN
   }
 
   const selectorToMode = buildSelectorToMode(modeMap);
+  const prefix = prefixOverride ?? detectTailwindPrefix(root);
 
   const theme = new Map<string, Decl>(); // name -> @theme declaration
   const scoped = new Map<string, Map<ModeName, Decl>>(); // name -> mode -> declaration (root = DEFAULT_MODE)
@@ -79,7 +85,9 @@ export function readTailwindCss(css: string, file: string, modeMap: Record<ModeN
     if (passThrough && !theme.has(passThrough) && scoped.get(passThrough)?.has(DEFAULT_MODE)) {
       for (const [mode, d] of scoped.get(passThrough)!) perMode.set(mode, d);
     }
-    for (const [mode, d] of scoped.get(name) ?? []) {
+    // Unprefixed overrides first, then prefixed ones (the names Tailwind actually emits) on top.
+    const overrides = [...(scoped.get(name) ?? []), ...(prefix ? (scoped.get(`--${prefix}-${key}`) ?? []) : [])];
+    for (const [mode, d] of overrides) {
       if (mode !== DEFAULT_MODE) perMode.set(mode, d);
     }
 
@@ -101,9 +109,20 @@ export function readTailwindCss(css: string, file: string, modeMap: Record<ModeN
     });
   }
 
-  const set: TokenSet = { origin: "code", modes: [...allModes], tokens, diagnostics };
+  const set: TokenSet = { origin: "code", modes: [...allModes], tokens, diagnostics, ...(prefix ? { tailwindPrefix: prefix } : {}) };
   for (const token of tokens.values()) token.type = inferType(set, token);
   return set;
+}
+
+/** `@import "tailwindcss" prefix(ds);` -> "ds". */
+function detectTailwindPrefix(root: postcss.Root): string | null {
+  let found: string | null = null;
+  root.walkAtRules("import", (at) => {
+    if (!/tailwindcss/.test(at.params)) return;
+    const m = /prefix\(\s*([A-Za-z0-9_-]+)\s*\)/.exec(at.params);
+    if (m) found = m[1]!;
+  });
+  return found;
 }
 
 export function buildSelectorToMode(modeMap: Record<ModeName, string[]>): Map<string, ModeName> {

@@ -64,8 +64,10 @@ export interface TokenSource {
     scopes?: string[];
     /** codeSyntax.WEB, when set. */
     codeSyntax?: string;
-    /** codeSyntax.WEB is set but matched no token in code; the key fell back to the name rule. */
+    /** codeSyntax.WEB is identifier-shaped but matched no token in code; the key fell back to the name rule. */
     codeSyntaxUnmatched?: boolean;
+    /** The CSS token an exact `var(--x)` codeSyntax names (prefix stripped), whether or not code has it. */
+    codeSyntaxVar?: string;
   };
   code?: {
     cssVar: string;
@@ -101,6 +103,8 @@ export interface FigmaCollectionInfo {
 
 export interface TokenSet {
   origin: "figma" | "code";
+  /** Code only: Tailwind's prefix (`prefix(ds)` -> "ds"); runtime variables are `--ds-…`. */
+  tailwindPrefix?: string;
   colorProfile?: ColorProfile;
   figmaCollections?: FigmaCollectionInfo[];
   modes: ModeName[];
@@ -141,6 +145,8 @@ export interface CompareSettings {
   remBase: number;
   /** Mode name -> CSS selectors (or "@variant <name>") that hold that mode's overrides. */
   modeMap: Record<ModeName, string[]>;
+  /** Tailwind prefix, when the `@import "tailwindcss" prefix(…)` isn't in the code file. */
+  prefix?: string;
 }
 
 export const DEFAULT_SETTINGS: CompareSettings = {
@@ -251,8 +257,8 @@ export interface ActionBase {
 export type Action = ActionBase &
   (
     | { op: "update-code"; cssVar: string; context: string; from: string | null; to: string }
-    | { op: "add-code"; cssVar: string; values: Record<string, string> } // keyed by context
-    | { op: "delete-code"; cssVar: string; destructive: true }
+    | { op: "add-code"; cssVar: string; values: Record<string, string>; modeCssVar?: string } // values keyed by context; modeCssVar: the (prefixed) name for mode blocks
+    | { op: "delete-code"; cssVar: string; modeCssVar?: string; destructive: true }
     | { op: "update-figma"; variableId: string; modeId: string; from: FigmaValue | null; to: FigmaValue }
     | {
         op: "add-figma";

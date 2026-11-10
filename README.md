@@ -103,6 +103,7 @@ asks three questions and writes the file for you.
 | `resolutions` | Your answers to questions the engine can't decide (optional until needed) |
 | `modes` | Optional. CSS selectors per mode, e.g. `{ "dark": [".dark"] }` (default: `.dark`, `[data-theme="dark"]`, `@variant dark`) |
 | `figmaCollection` | Optional. Default collection for new single-mode Figma variables |
+| `prefix` | Optional. Tailwind prefix, if `@import "tailwindcss" prefix(…)` isn't in the `code` file |
 | `nearThreshold`, `rgbTolerance`, `precision`, `remBase` | Optional comparison settings (defaults: 0.005 ΔE, 0.5/255, `{l:4,c:4,h:2}`, 16px) |
 
 Paths are relative to the config file. Add `.token-parity/` to `.gitignore`; it holds temporary plan
@@ -240,10 +241,13 @@ dependency or a private registry), not a local path.
 ## Good to know
 
 - **Matching names.** The best link is the variable's **code syntax** (`codeSyntax.WEB`, set in Figma's
-  variable editor and shown in Dev Mode). `var(--color-primary)` or `--color-primary` maps straight to
-  that CSS variable. Other forms work when they point at exactly one token in your CSS: a Tailwind class
-  like `bg-primary`, `p-4` or `rounded-md`, a Sass `$color-primary`, or `theme.colors.primary`. Without
-  code syntax, Figma `color/brand/primary` matches `--color-brand-primary` by name. After the first sync
+  variable editor and shown in Dev Mode). `var(--color-primary)` matches that CSS variable when your
+  `@theme` has it. With a Tailwind prefix (`@import "tailwindcss" prefix(ds)`), `var(--ds-color-primary)`
+  matches `--color-primary` too. Other names work when they point at exactly one token in your CSS: a
+  Tailwind class like `bg-primary`, `p-4` or `rounded-md`, a Sass `$color-primary`, or
+  `theme.colors.primary`. Expressions such as `calc(…)` and literals such as `2px` aren't names.
+  Variables whose code syntax doesn't match fall back to their Figma name: `color/brand/primary` matches
+  `--color-brand-primary`. After the first sync
   the lock also remembers each variable's Figma ID, so renaming a variable in Figma doesn't break the
   match.
 - **New Figma variables** are named and scoped like the closest existing variable. For example,

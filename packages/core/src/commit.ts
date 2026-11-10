@@ -52,8 +52,8 @@ export async function commitPending(plan: Plan, freshFigmaPath: string): Promise
   }
 
   const settings = plan.settings;
-  const code = readTailwindCss(css, plan.inputs.code.path, settings.modeMap);
-  const figma = readFigmaExport(freshJson, freshFigmaPath, keysByVariableId(lock), new Set(code.tokens.keys()));
+  const code = readTailwindCss(css, plan.inputs.code.path, settings.modeMap, settings.prefix ?? null);
+  const figma = readFigmaExport(freshJson, freshFigmaPath, keysByVariableId(lock), new Set(code.tokens.keys()), code.tailwindPrefix ?? null);
   const { findings } = compare({ figma, code, lock, settings });
   const touched = new Set(pending.touched);
   const problems = findings.filter((f) => touched.has(f.token) && f.severity !== "warning");
