@@ -35,14 +35,14 @@ describe("compileIgnore", () => {
   });
 });
 
-const PREFIXED = join(import.meta.dirname, "fixtures", "tailwind-prefix-dark");
+const PREFIX_DARK = join(import.meta.dirname, "fixtures", "tailwind-prefix-dark");
 
 describe("ignore in check and plan", () => {
   const run = (dir: string, ignore: string[], lock: string | null = null) =>
     check({ figmaPath: join(dir, "figma.json"), codePath: join(dir, "theme.css"), lockPath: lock, settings: { ...PERCEPTUAL, ignore } });
 
   it("drops Figma-only groups and intentional code-only dark overrides from the report", async () => {
-    const report = await run(PREFIXED, ["dark/*", "color-amber-*:dark"]);
+    const report = await run(PREFIX_DARK, ["dark/*", "color-amber-*:dark"]);
     expect(report.findings.map((f) => f.id)).toEqual(["near-match:color-amber-100:default"]); // the default value is still compared
     expect(report.summary.errors).toBe(0);
     expect(report.summary.tokensCompared).toBe(4);
@@ -50,7 +50,7 @@ describe("ignore in check and plan", () => {
   });
 
   it("still resolves aliases to ignored tokens", async () => {
-    const report = await run(PREFIXED, ["dark/*"]);
+    const report = await run(PREFIX_DARK, ["dark/*"]);
     expect(report.findings.map((f) => f.kind)).not.toContain("broken-alias"); // color-fg-1 dark aliases dark/fg-1
     expect(report.findings.map((f) => f.token)).not.toContain("color-fg-1");
   });
@@ -64,7 +64,7 @@ describe("ignore in check and plan", () => {
   });
 
   it("plan leaves ignored tokens alone, including their lock entries", async () => {
-    const dir = copyFixture(PREFIXED);
+    const dir = copyFixture(PREFIX_DARK);
     const stale = { oklch: "oklch(0.5 0 0)", figmaRgb: { r: 0.5, g: 0.5, b: 0.5, a: 1 } };
     writeJson(join(dir, "tokens.lock.json"), { version: 1, figmaColorProfile: "srgb", tokens: { "dark-fg-1": { type: "color", modes: { default: stale } } } });
     const p = await plan({
@@ -83,7 +83,7 @@ describe("ignore in check and plan", () => {
   });
 
   it("comes from the config file or --ignore", async () => {
-    const dir = copyFixture(PREFIXED);
+    const dir = copyFixture(PREFIX_DARK);
     writeJson(join(dir, "token-parity.config.json"), { figma: "figma.json", code: "theme.css", colorMatch: "perceptual", ignore: ["dark/*", "color-amber-*:dark"] });
     const io = { stdout: () => {}, stderr: () => {} };
     expect(await runCli(["check", "--config", join(dir, "token-parity.config.json")], io)).toBe(0);

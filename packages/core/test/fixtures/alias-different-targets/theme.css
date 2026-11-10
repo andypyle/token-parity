@@ -1,4 +1,4 @@
-/* Both sides alias, but to different variables that resolve to the same color (real project):
+/* Both sides alias, but to different variables that resolve to the same color:
    - accent-soft dark: Figma {dark/green-100} (#253222); code var(--color-green-100), overridden in .dark to #253222
    - on-control: Figma {gray/900}; code var(--color-on-fill) -> var(--color-gray-900); both #1a1f24 */
 @theme {

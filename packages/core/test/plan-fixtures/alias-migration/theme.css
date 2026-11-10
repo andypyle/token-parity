@@ -1,4 +1,4 @@
-/* the test project's "scales + semantics" migration: dark mode re-points semantics at scale steps.
+/* A "scales + semantics" migration: dark mode re-points semantics at scale steps.
    Code moved page's Dark from the dark/page primitive to a new gray-950 step with the same value.
    Plan (prefer code) creates gray/950 in Figma, then re-aliases page's Dark to it, in one change set. */
 @import "tailwindcss" prefix(ds);

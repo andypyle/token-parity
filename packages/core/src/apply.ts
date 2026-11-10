@@ -6,6 +6,7 @@ import { dirname } from "node:path";
 import { editCss } from "./css-edit.js";
 import { jsonChecksum } from "./figma-script.js";
 import { InputError } from "./errors.js";
+import { assertInside } from "./paths.js";
 import { defaultChangesPath, pendingPath, sha256, toJson, type Pending } from "./state.js";
 import type { Action, FigmaChangeSet, FigmaOperation, Plan } from "./types.js";
 import { resolvedTypeOf } from "./values.js";
@@ -21,6 +22,8 @@ export class StalePlanError extends Error {
 export interface ApplyOptions {
   allowDeletes: boolean;
   changesOut?: string;
+  /** Project folder. When set (the CLI always sets it), every file apply touches must be inside it. */
+  root?: string;
 }
 
 export interface ApplyResult {
@@ -37,6 +40,11 @@ export interface ApplyResult {
 
 export async function applyPlan(plan: Plan, options: ApplyOptions): Promise<ApplyResult> {
   const { figma, code, lock } = plan.inputs;
+  if (options.root) {
+    for (const [what, path] of [["the code file", code.path], ["the Figma export", figma.path], ["the lock file", lock.path], ["the change set", options.changesOut]] as const) {
+      if (path) assertInside(options.root, path, what);
+    }
+  }
   const css = await readOrNull(code.path);
   if (css === null) throw new InputError("cannot read file", code.path);
   if (sha256(css) !== code.sha256) throw new StalePlanError(code.path);

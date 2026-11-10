@@ -44,6 +44,8 @@ function splitPercent(arg: string): { color: string; pct: number | null } {
 const oklchToCulori = (c: OklchColor): Color => ({ mode: "oklch", l: c.l, c: c.c, ...(c.h === null ? {} : { h: c.h }), alpha: c.alpha });
 
 export function evaluateColorMix(raw: string, resolve: OperandResolver): MixResult {
+  // Real color-mix() values are short; a bound keeps the parsing below cheap on anything pathological.
+  if (raw.length > 500) return { ok: false, reason: "too long to evaluate" };
   const m = HEAD.exec(raw.trim());
   if (!m) return { ok: false, reason: "not a color-mix() this tool can read" };
   const space = m[1]!.toLowerCase() as Space;

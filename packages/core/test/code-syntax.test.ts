@@ -201,7 +201,7 @@ describe("plan with a Tailwind prefix", () => {
   });
 });
 
-describe("Tailwind prefix, round 2 (real project)", () => {
+describe("Tailwind prefix: references, resets, aliases and single-mode collections", () => {
   const dir = join(FIXTURES, "tailwind-prefix-dark");
 
   it("strips the prefix from var() references and skips namespace resets", () => {

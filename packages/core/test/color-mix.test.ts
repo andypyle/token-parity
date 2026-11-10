@@ -45,7 +45,7 @@ describe("evaluateColorMix", () => {
   });
 });
 
-describe("color-mix() in code (overlay)", () => {
+describe("color-mix() in code (an overlay)", () => {
   const css = `@import "tailwindcss" prefix(ds);
 @theme {
   --color-gray-900: #1a1f24;
@@ -104,5 +104,11 @@ describe("color-mix() in code (overlay)", () => {
     writeJson(inputs.figmaPath, figma);
     const p = await plan({ ...inputs, prefer: "figma", resolutionsPath: null, figmaCollection: null });
     expect(p.unresolved).toEqual([expect.objectContaining({ token: "color-overlay", mode: "dark", reason: "computed-in-code" })]);
+  });
+});
+
+describe("color-mix() input bound", () => {
+  it("refuses pathological input instead of parsing it", () => {
+    expect(evaluateColorMix(`color-mix(in srgb, ${" ".repeat(5000)}red 50%, blue)`, literal)).toEqual({ ok: false, reason: "too long to evaluate" });
   });
 });

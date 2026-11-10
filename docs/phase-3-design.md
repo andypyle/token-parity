@@ -166,7 +166,7 @@ the name rule (`a/b/c` ↔ `--a-b-c`).
   style (`var(--x)` by default). The export carries it as `code`, only when set, and the post-push
   prediction includes it.
 
-## Real-project fixes (Tailwind `prefix(ds)`)
+## Real-project fixes (Tailwind `prefix()`)
 
 - **`var()` references in CSS use the emitted names.** Tailwind doesn't rewrite them, so code writes
   `--color-accent: var(--ds-color-green-500)`. A reference whose unprefixed name is a theme token reads as
@@ -222,7 +222,7 @@ code.
   original fixtures in `test/fixtures` and `test/plan-fixtures` describe this mode and run with it
   explicitly. Exact-mode fixtures live in `test/exact-fixtures`.
 
-## Aliases to different variables; computed values (Real-project round 3)
+## Aliases to different variables; computed values
 
 - **Aliases.** Values compare by what they resolve to unless both sides alias the same variable, which is
   equal by structure. Figma `{gray/900}` vs code `var(--color-on-fill)` → `var(--color-gray-900)` is in sync
@@ -234,7 +234,7 @@ code.
   It compares normally. Figma → code fixes are unresolved (`computed-in-code`); code → Figma works. A check
   reports the count as info.
 
-## Real-project round 4: scales + semantics
+## Scales and semantics
 
 - **Naming through codeSyntax siblings.** A sibling matched by codeSyntax shows how keys map to names
   (`green/500` ↔ `color-green-500`: drop `color-`), so `color-green-900` becomes `green/900` in the sibling's

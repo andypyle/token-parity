@@ -1,4 +1,4 @@
-/* Real-project-style: Tailwind prefix(ds). @theme declares unprefixed names; Tailwind emits --ds-*.
+/* Tailwind prefix(ds). @theme declares unprefixed names; Tailwind emits --ds-*.
    Figma codeSyntax uses the emitted names (var(--ds-…)) plus expressions/literals that name no token.
    The dark override uses the emitted (prefixed) name. */
 @import "tailwindcss" prefix(ds);

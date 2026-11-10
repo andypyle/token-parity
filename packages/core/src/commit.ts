@@ -9,7 +9,8 @@ import { compare } from "./compare.js";
 import { deriveComputedTokens } from "./derive.js";
 import { InputError } from "./errors.js";
 import { parseLock } from "./lock.js";
-import { pendingPath, sha256, toJson, type Pending } from "./state.js";
+import { isInside, assertInside } from "./paths.js";
+import { pendingPath, sha256, stateDir, toJson, type Pending } from "./state.js";
 import { tpChecksum } from "./figma-bridge.js";
 import { isCompactExport, predictExport, type PushResult } from "./predict.js";
 import type { Diagnostic, FigmaChangeSet, Finding, Plan } from "./types.js";
@@ -24,11 +25,19 @@ export interface CommitResult {
   lockPath: string;
 }
 
-export async function commitPending(plan: Plan, freshFigmaPath: string): Promise<CommitResult> {
+/**
+ * @param root Project folder. When set (the CLI always sets it), every file commit writes must be inside it.
+ */
+export async function commitPending(plan: Plan, freshFigmaPath: string, root?: string): Promise<CommitResult> {
   const lockPath = plan.inputs.lock.path;
   const statePath = pendingPath(lockPath);
+  if (root) assertInside(root, lockPath, "the lock file");
   if (!existsSync(statePath)) throw new InputError("nothing pending; run apply first", statePath);
   const pending = parseJson(await readFile(statePath, "utf8"), statePath) as Pending;
+  // commit deletes the change set afterwards: only ever inside .token-parity/, whatever pending.json says.
+  if (!isInside(stateDir(lockPath), pending.changesPath)) {
+    throw new InputError(`pending.json names a change set outside ${stateDir(lockPath)}; refusing to use it`, statePath);
+  }
   if (pending.plan.figma.sha256 !== plan.inputs.figma.sha256 || pending.plan.code.sha256 !== plan.inputs.code.sha256) {
     throw new InputError("the pending changes come from a different plan", statePath);
   }
@@ -77,7 +86,7 @@ export async function commitPending(plan: Plan, freshFigmaPath: string): Promise
  * Commit without a second export: predict Figma's post-push export from the pre-push export and the change
  * set, confirm it against the checksum the push returned, write it to the export path, then commit as usual.
  */
-export async function commitFromPush(plan: Plan, push: PushResult): Promise<CommitResult> {
+export async function commitFromPush(plan: Plan, push: PushResult, root?: string): Promise<CommitResult> {
   const lockPath = plan.inputs.lock.path;
   const statePath = pendingPath(lockPath);
   if (!existsSync(statePath)) throw new InputError("nothing pending; run apply first", statePath);
@@ -87,6 +96,7 @@ export async function commitFromPush(plan: Plan, push: PushResult): Promise<Comm
   const pending = parseJson(await readFile(statePath, "utf8"), statePath) as Pending;
 
   const figmaPath = plan.inputs.figma.path;
+  if (root) assertInside(root, figmaPath, "the Figma export");
   const beforeText = await readText(figmaPath);
   if (sha256(beforeText) !== plan.inputs.figma.sha256) throw new InputError("changed since plan; export again and run commit with --figma", figmaPath);
   const before = parseJson(beforeText, figmaPath);
@@ -98,5 +108,5 @@ export async function commitFromPush(plan: Plan, push: PushResult): Promise<Comm
     return { ok: false, predictionMismatch: true, problems: [], diagnostics: [], lockPath };
   }
   await writeFile(figmaPath, toJson(predicted));
-  return commitPending(plan, figmaPath);
+  return commitPending(plan, figmaPath, root);
 }
