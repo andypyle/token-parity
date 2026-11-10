@@ -345,15 +345,15 @@ function comparePair(ctx: Ctx, f: NormalizedToken, c: NormalizedToken, pair: Pai
   const { mode } = pair;
   const fv = pair.figma!;
   const cv = pair.code!;
-  // An alias on one side and a literal on the other compare by resolved value: Figma's {dark/fg-1} and
-  // code's #e9edf0 are the same color. Aliases on both sides still compare by target.
-  const oneAlias = (fv.kind === "alias") !== (cv.kind === "alias");
-  const fCmp = oneAlias ? resolvedOr(ctx.figma, fv, pair.figmaMode) : fv;
-  const cCmp = oneAlias ? resolvedOr(ctx.code, cv, pair.codeMode) : cv;
+  // Unless both sides alias the same variable, compare resolved values: Figma's {dark/fg-1} and code's
+  // #e9edf0 are the same color, and so are Figma {gray/900} and code var(--color-on-fill) -> var(--color-gray-900).
+  const byValue = resolvesByValue(fv, cv);
+  const fCmp = byValue ? resolvedOr(ctx.figma, fv, pair.figmaMode) : fv;
+  const cCmp = byValue ? resolvedOr(ctx.code, cv, runtimeCodeMode(f, pair)) : cv;
   const result =
     fCmp.kind === "color" && cCmp.kind === "color" ? compareColors(ctx, fCmp, cCmp, lockEntry) : compareGeneric(ctx, fCmp, cCmp, lockEntry);
   // A side is unchanged if either its alias or its resolved value is what the lock recorded.
-  if (lockEntry && oneAlias) {
+  if (lockEntry && byValue) {
     if (result.figmaChanged && lockMatches(ctx, "figma", fv, lockEntry)) result.figmaChanged = false;
     if (result.codeChanged && lockMatches(ctx, "code", cv, lockEntry)) result.codeChanged = false;
   }
@@ -493,6 +493,21 @@ function compareColors(
   const distance = color.deltaEOK(figmaOklch.color, compareTo);
   const relation: Relation = distance < SAME_COLOR_EPSILON ? "same" : distance < ctx.settings.nearThreshold ? "near" : "different";
   return { figmaChanged, codeChanged, relation, distance, figmaOklch };
+}
+
+/**
+ * The mode a code alias resolves in. CSS resolves var() at runtime, so a single `@theme` value like
+ * var(--color-green-100) picks up `.dark { --color-green-100: … }` when the dark pair is compared.
+ */
+export function runtimeCodeMode(f: NormalizedToken, pair: Pair): ModeName {
+  const fMulti = !(f.modes.length === 1 && f.modes[0] === DEFAULT_MODE);
+  return fMulti && pair.codeMode === DEFAULT_MODE && pair.mode !== f.modes[0] ? pair.mode : pair.codeMode;
+}
+
+/** True unless both values are literals, or both alias the same variable (which is equal by structure). */
+export function resolvesByValue(a: TokenValue, b: TokenValue): boolean {
+  if (a.kind !== "alias" && b.kind !== "alias") return false;
+  return !(a.kind === "alias" && b.kind === "alias" && a.ref === b.ref);
 }
 
 export function resolvedOr(set: TokenSet, value: TokenValue, mode: ModeName): TokenValue {

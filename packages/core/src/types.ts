@@ -76,6 +76,8 @@ export interface TokenSource {
     selector: string;
     /** Per-mode declaration site (differs from cssVar for pass-through variables). */
     modes: Record<ModeName, CodeLocation>;
+    /** Set for values code computes (`calc(var(--spacing) * 4)`): the variable they derive from. Not editable. */
+    derivedFrom?: string;
   };
 }
 
@@ -306,6 +308,7 @@ export type UnresolvedReason =
   | "no-code-mode-selector"
   | "depends-on-unresolved"
   | "code-syntax-unmatched"
+  | "computed-in-code"
   | "unsupported";
 
 export interface Unresolved {

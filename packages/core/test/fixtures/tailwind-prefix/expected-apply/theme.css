@@ -9,7 +9,6 @@
   --text-xs: 0.75rem;
   --spacing: 0.25rem;
   --border-2: 2;
-  --spacing-1: 4px;
 }
 
 [data-theme="dark"] {

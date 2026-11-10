@@ -267,9 +267,13 @@ dependency or a private registry), not a local path.
   `.dark` (or your configured selectors) are the matching Figma mode.
   A single-mode Figma collection (often Primitives) has no dark mode, so a dark override of one of
   its tokens in code is reported as exactly that, rather than as a value mismatch.
-- **Aliases vs values.** Figma `{dark/fg-1}` and code `#e9edf0` are equal if the alias resolves to that
-  color, so one side using an alias and the other an inline value isn't drift. Two aliases still
-  compare by what they point at.
+- **Aliases vs values.** Aliases compare by the value they resolve to. Figma `{dark/fg-1}` and code
+  `#e9edf0` are equal if the alias resolves to that color, and so are Figma `{gray/900}` and code
+  `var(--color-on-fill)` → `var(--color-gray-900)` when both land on the same color. Code aliases resolve the
+  way the browser does: in dark mode, `var(--color-green-100)` picks up a `.dark` override.
+- **Computed spacing.** Tailwind derives spacing steps from one `--spacing`. A Figma variable whose code
+  syntax is `calc(var(--spacing) * 4)` is checked against 4 × `--spacing`. A mismatch can be fixed in Figma,
+  but not written into code, since code has no declaration for it.
 - **Tailwind prefix.** With `prefix(ds)`, code may refer to the emitted names (`var(--ds-color-x)`,
   `[data-theme="dark"] { --ds-color-x: … }`); both are read as `--color-x`. Namespace resets like
   `--color-*: initial` are ignored.

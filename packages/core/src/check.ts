@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { readFigmaExport } from "./adapters/figma.js";
 import { readTailwindCss } from "./adapters/tailwind.js";
 import { compare } from "./compare.js";
+import { deriveComputedTokens } from "./derive.js";
 import { InputError } from "./errors.js";
 import { parseLock } from "./lock.js";
 import { DEFAULT_SETTINGS, FINDING_KINDS, type CompareSettings, type Diagnostic, type FindingKind, type LockFile, type Report, type TokenSet } from "./types.js";
@@ -53,6 +54,7 @@ export async function loadInputs(options: CheckOptions): Promise<LoadedInputs> {
   const code = readTailwindCss(codeText, options.codePath, settings.modeMap, settings.prefix ?? null, settings.colorFormat === "oklch");
   const figma = readFigmaExport(parseJson(figmaText, options.figmaPath), options.figmaPath, keysByVariableId(lock), new Set(code.tokens.keys()), code.tailwindPrefix ?? null);
   diagnostics.push(...renameDiagnostics(figma, lock));
+  diagnostics.push(...deriveComputedTokens(figma, code));
 
   return { settings, figma, code, lock, lockPath, text: { figma: figmaText, code: codeText, lock: lockText }, diagnostics };
 }

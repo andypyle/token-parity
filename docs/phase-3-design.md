@@ -221,3 +221,15 @@ code.
 - **`colorMatch: "perceptual"`** is the earlier behavior (OKLCH ΔE, near-matches, `oklch()` allowed). The
   original fixtures in `test/fixtures` and `test/plan-fixtures` describe this mode and run with it
   explicitly. Exact-mode fixtures live in `test/exact-fixtures`.
+
+## Aliases to different variables; computed values (Real-project round 3)
+
+- **Aliases.** Values compare by what they resolve to unless both sides alias the same variable, which is
+  equal by structure. Figma `{gray/900}` vs code `var(--color-on-fill)` → `var(--color-gray-900)` is in sync
+  when both reach the same color. Retargeting an alias to an equal-valued variable is not a value change.
+- **Code aliases resolve in the runtime mode.** A single `@theme` value `var(--color-green-100)` resolves to
+  the `.dark` override of `--color-green-100` when the dark pair is compared, as the browser would.
+- **Computed values.** A Figma variable whose codeSyntax is `calc(var(--x) * n)` (or `n * var(--x)`) gets a
+  read-only computed code value, n × `--x` (prefix stripped), when code declares `--x` but not the token.
+  It compares normally. Figma → code fixes are unresolved (`computed-in-code`); code → Figma works. A check
+  reports the count as info.

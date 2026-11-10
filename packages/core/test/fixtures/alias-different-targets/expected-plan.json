@@ -1,0 +1,6 @@
+{ "exitCode": 1,
+  "actions": [ { "id": "add-code:dark-green-100:*", "op": "add-code", "via": "suggested" } ],
+  "unresolved": [
+    { "finding": "missing-in-figma:color-on-fill:*", "reason": "needs-figma-name" },
+    { "finding": "missing-mode:color-green-100:dark", "reason": "figma-mode-missing" }
+  ] }

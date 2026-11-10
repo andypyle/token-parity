@@ -6,7 +6,7 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { loadInputs, parseJson } from "./check.js";
-import { compare, lockMatches, pairModes, resolvedOr, type Pair } from "./compare.js";
+import { compare, lockMatches, pairModes, resolvedOr, resolvesByValue, runtimeCodeMode, type Pair } from "./compare.js";
 import { InputError } from "./errors.js";
 import { detectCodeSyntaxStyle, formatCodeSyntax } from "./code-syntax.js";
 import { compileIgnore, type IgnoreMatcher } from "./ignore.js";
@@ -176,7 +176,7 @@ function collectBaseline(
     if (ignore.mode(f.key, pair.mode, f, c)) continue;
     const existing = lockToken?.modes[pair.mode];
     if (existing && lockMatches(lockCtx, "figma", pair.figma, existing) && lockMatches(lockCtx, "code", pair.code, existing)) continue;
-    const entry = entryFromSides(...comparable(ctx, pair));
+    const entry = entryFromSides(...comparable(ctx, f, pair));
     if (!entry) continue;
     out.set(f.key, { ...out.get(f.key), [pair.mode]: entry });
   }
@@ -188,7 +188,7 @@ function collectBaseline(
 function handleFinding(ctx: Ctx, finding: Finding, f: NormalizedToken | undefined, c: NormalizedToken | undefined) {
   if (finding.kind === "near-match") {
     const pair = f && c ? pairModes(f, c).find((p) => p.mode === finding.mode) : undefined;
-    const entry = pair?.figma && pair.code ? entryFromSides(...comparable(ctx, pair)) : null;
+    const entry = pair?.figma && pair.code ? entryFromSides(...comparable(ctx, f!, pair)) : null;
     if (pair && entry) {
       push(ctx, { op: "lock-only" }, finding, "near-match", entry, { token: finding.token, type: c!.type, modes: { [pair.mode]: entry } });
     }
@@ -265,6 +265,8 @@ function copyValue(ctx: Ctx, finding: Finding, f: NormalizedToken, c: Normalized
 
   if (dir === "figma-to-code") {
     const fv = pair.figma!;
+    // Computed in code (calc(var(--spacing) * n)): there is no declaration to rewrite.
+    if (c.source.code?.derivedFrom) return unresolve(ctx, finding, "computed-in-code", `${c.source.code.selector}, with --${c.source.code.derivedFrom}`);
     // A single-mode code token gets a mode override rather than having its shared default overwritten.
     let targetMode: ModeName;
     if (cSingle && !fSingle && pair.mode !== f.modes[0]) targetMode = pair.mode; // new override block
@@ -477,11 +479,10 @@ function deleteCode(ctx: Ctx, finding: Finding, c: NormalizedToken, via: Via) {
   push(ctx, { op: "delete-code", cssVar: c.source.code!.cssVar, ...(prefix ? { modeCssVar: `--${prefix}-${c.key}` } : {}), destructive: true }, finding, via, null, null);
 }
 
-/** The values compare used for a pair: when exactly one side is an alias, both sides resolved. */
-function comparable(ctx: Ctx, pair: Pair): [TokenValue, TokenValue] {
-  const oneAlias = (pair.figma!.kind === "alias") !== (pair.code!.kind === "alias");
-  return oneAlias
-    ? [resolvedOr(ctx.figma, pair.figma!, pair.figmaMode), resolvedOr(ctx.code, pair.code!, pair.codeMode)]
+/** The values compare used for a pair: resolved, unless both are literals or alias the same variable. */
+function comparable(ctx: Ctx, f: NormalizedToken, pair: Pair): [TokenValue, TokenValue] {
+  return resolvesByValue(pair.figma!, pair.code!)
+    ? [resolvedOr(ctx.figma, pair.figma!, pair.figmaMode), resolvedOr(ctx.code, pair.code!, runtimeCodeMode(f, pair))]
     : [pair.figma!, pair.code!];
 }
 
@@ -531,6 +532,8 @@ function hint(finding: Finding, reason: UnresolvedReason, detail?: string): stri
       return `No CSS selector is configured for this mode${suffix || ` "${finding.mode}"`}. Pass --mode <name>=<selector>.`;
     case "code-syntax-unmatched":
       return `Its codeSyntax.WEB (${detail}) matches no token in code, so the CSS name is unknown. Set it in Figma to the CSS variable you want, e.g. var(--color-accent), then re-plan.`;
+    case "computed-in-code":
+      return `Code computes this value (${detail}), so it can't be edited directly. Change the base variable in code, change the value in Figma, or resolve ${rk} to "code".`;
     case "depends-on-unresolved":
       return `Aliases a token that this plan cannot create yet${suffix}. Resolve that token first.`;
     default:
