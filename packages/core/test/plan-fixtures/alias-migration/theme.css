@@ -1,0 +1,15 @@
+/* the test project's "scales + semantics" migration: dark mode re-points semantics at scale steps.
+   Code moved page's Dark from the dark/page primitive to a new gray-950 step with the same value.
+   Plan (prefer code) creates gray/950 in Figma, then re-aliases page's Dark to it, in one change set. */
+@import "tailwindcss" prefix(ds);
+
+@theme {
+  --color-green-100: #e8f0e6;
+  --color-gray-900: #1a1f24;
+  --color-gray-950: #14181c;
+  --color-page: var(--ds-color-green-100);
+}
+
+[data-theme="dark"] {
+  --ds-color-page: var(--ds-color-gray-950);
+}

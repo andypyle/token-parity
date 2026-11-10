@@ -130,9 +130,11 @@ describe("three-way classification", () => {
     const vars = { ...v("V:1", "color/a", "VC:1", { "1:0": BLUE }), ...v("V:2", "color/c", "VC:1", { "1:0": RED }), ...v("V:3", "color/b", "VC:1", { "1:0": { type: "VARIABLE_ALIAS", id: "V:2" } }) };
     const css = "@theme { --color-a: oklch(0.62 0.19 259.8); --color-c: #ff0000; --color-b: var(--color-a); }";
     expect(kinds(run(vars, css, aliasLock))).toEqual(["value-mismatch:color-b:default:figma-to-code"]);
-    // Retargeting to a variable with the same color is not a value change.
+    // Retargeting to a variable with the same color is an alias change, not a value change.
     const same = { ...vars, ...v("V:2", "color/c", "VC:1", { "1:0": BLUE }) };
-    expect(kinds(run(same, "@theme { --color-a: oklch(0.62 0.19 259.8); --color-c: oklch(0.62 0.19 259.8); --color-b: var(--color-a); }", aliasLock))).toEqual([]);
+    expect(kinds(run(same, "@theme { --color-a: oklch(0.62 0.19 259.8); --color-c: oklch(0.62 0.19 259.8); --color-b: var(--color-a); }", aliasLock))).toEqual([
+      "alias-mismatch:color-b:default:figma-to-code",
+    ]);
   });
 });
 

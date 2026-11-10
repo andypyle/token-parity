@@ -15,14 +15,21 @@ export function figmaRgbOf(v: TokenValue): Rgba | null {
   return { r: v.color.r, g: v.color.g, b: v.color.b, a: v.color.alpha };
 }
 
-/** Lock entry describing two sides that agree (code text + Figma's current RGB). */
-export function entryFromSides(figma: TokenValue, code: TokenValue): LockModeEntry | null {
-  if (code.kind === "alias") return { alias: code.ref };
+/**
+ * Lock entry for two sides that agree: the resolved value (code's text, Figma's current RGB) plus which variable
+ * each side aliased, so a later re-alias on either side can be told apart from a value change.
+ */
+export function entryFromSides(figma: TokenValue, code: TokenValue, figmaOrig: TokenValue = figma, codeOrig: TokenValue = code): LockModeEntry | null {
+  const aliases = {
+    ...(figmaOrig.kind === "alias" ? { figmaAlias: figmaOrig.ref } : {}),
+    ...(codeOrig.kind === "alias" ? { codeAlias: codeOrig.ref } : {}),
+  };
+  if (code.kind === "alias") return { alias: code.ref }; // unresolvable: keep the reference
   if (code.kind === "color") {
     const rgb = figmaRgbOf(figma);
-    return rgb ? { oklch: lockOklchText(code), figmaRgb: rgb } : null;
+    return rgb ? { oklch: lockOklchText(code), figmaRgb: rgb, ...aliases } : null;
   }
-  return { value: code.raw };
+  return { value: code.raw, ...aliases };
 }
 
 const NUM = (n: number) => String(Math.round(n * 1e4) / 1e4);

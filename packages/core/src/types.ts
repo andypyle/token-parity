@@ -116,9 +116,19 @@ export interface TokenSet {
 
 // ---------- Lock file ----------
 
+/** Which variable each side aliased when the entry was written; absent for a side that held a literal. */
+export interface LockAliases {
+  figmaAlias?: TokenKey;
+  codeAlias?: TokenKey;
+}
+
+/**
+ * A synced value: always the resolved value (OKLCH + the RGB in Figma, or a scalar), plus each side's alias.
+ * `{ alias }` is the older form, meaning both sides aliased that token; it is still read.
+ */
 export type LockModeEntry =
-  | { oklch: string; figmaRgb: Rgba }
-  | { value: string }
+  | ({ oklch: string; figmaRgb: Rgba } & LockAliases)
+  | ({ value: string } & LockAliases)
   | { alias: TokenKey };
 
 export interface LockToken {
@@ -184,7 +194,8 @@ export type FindingKind =
   | "missing-mode"
   | "conflict"
   | "out-of-gamut"
-  | "format-mismatch";
+  | "format-mismatch"
+  | "alias-mismatch";
 
 export const FINDING_KINDS: readonly FindingKind[] = [
   "missing-in-code",
@@ -196,6 +207,7 @@ export const FINDING_KINDS: readonly FindingKind[] = [
   "conflict",
   "out-of-gamut",
   "format-mismatch",
+  "alias-mismatch",
 ];
 
 export type Severity = "error" | "warning" | "info";

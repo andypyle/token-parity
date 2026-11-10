@@ -185,6 +185,7 @@ Use `--format json` for machine-readable output, and `--out <file>` to write a f
 | `missing-mode` | error | A mode (e.g. dark) exists on one side only |
 | `broken-alias` | error | An alias points nowhere, loops, or has the wrong type |
 | `format-mismatch` | error | Same color as Figma, but not written as hex or `rgb()` (exact matching) |
+| `alias-mismatch` | error | Same value, but each side aliases a different variable (e.g. Figma `{dark/page}`, code `var(--color-gray-950)`) |
 | `near-match` | info | Colors differ only by rounding (perceptual matching only) |
 | `out-of-gamut` | warning | The code color is outside Figma's color profile |
 
@@ -268,10 +269,16 @@ dependency or a private registry), not a local path.
   `default`, whatever Figma names it; other modes keep their names (`dark`).
   A single-mode Figma collection (often Primitives) has no dark mode, so a dark override of one of
   its tokens in code is reported as exactly that, rather than as a value mismatch.
-- **Aliases vs values.** Aliases compare by the value they resolve to. Figma `{dark/fg-1}` and code
-  `#e9edf0` are equal if the alias resolves to that color, and so are Figma `{gray/900}` and code
-  `var(--color-on-fill)` → `var(--color-gray-900)` when both land on the same color. Code aliases resolve the
-  way the browser does: in dark mode, `var(--color-green-100)` picks up a `.dark` override.
+- **Aliases vs values.** Values compare by what they resolve to, so Figma `{dark/fg-1}` against code
+  `#e9edf0` is in sync when the alias gives that color. If *both* sides alias, but different variables, the
+  values may match while the structure doesn't. For example, Figma Dark still points at `{dark/page}` after
+  code moved to `var(--color-gray-950)`. That's an `alias-mismatch`, so a migration doesn't stall halfway.
+  `plan` can re-alias Figma, creating the target first if needed. It only proposes an alias that gives code's
+  value in that mode; otherwise it writes the value and says why. Code aliases resolve the way the browser
+  does: in dark mode, `var(--color-green-100)` picks up a `.dark` override.
+- **`color-mix()`** in code is evaluated (in `srgb`, `srgb-linear`, `oklab` or `oklch`, with `var()`
+  operands), so `color-mix(in srgb, var(--color-gray-900) 50%, transparent)` compares as that color at 50%.
+  Other forms are reported as "can't evaluate" and not compared.
 - **Computed spacing.** Tailwind derives spacing steps from one `--spacing`. A Figma variable whose code
   syntax is `calc(var(--spacing) * 4)` is checked against 4 × `--spacing`. A mismatch can be fixed in Figma,
   but not written into code, since code has no declaration for it.

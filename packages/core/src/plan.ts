@@ -6,7 +6,7 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { loadInputs, parseJson } from "./check.js";
-import { compare, lockEntryFor, lockMatches, modeLabel, pairModes, resolvedOr, resolvesByValue, runtimeCodeMode, type Pair } from "./compare.js";
+import { compare, lockEntryFor, lockMatches, modeLabel, pairModes, resolvedOr, resolvesByValue, runtimeCodeMode, sameValue, type Pair } from "./compare.js";
 import { InputError } from "./errors.js";
 import { detectCodeSyntaxStyle, formatCodeSyntax } from "./code-syntax.js";
 import { isColorMix } from "./color-mix.js";
@@ -71,6 +71,8 @@ interface Ctx {
   effects: Map<string, LockEffect>;
   unresolved: Unresolved[];
   skipped: string[];
+  /** Aliases to variables this plan creates, to verify once their values are known (see finalizeAliases). */
+  aliasChecks: Map<string, { ref: TokenKey; figmaMode: ModeName; expected: TokenValue }>;
   /** The format the code file mostly writes colors in, for new tokens under colorFormat "preserve". */
   fileColorFormat: "oklch" | "hex" | "rgb";
 }
@@ -93,6 +95,7 @@ export async function plan(options: PlanOptions): Promise<Plan> {
     effects: new Map(),
     unresolved: [],
     skipped: [],
+    aliasChecks: new Map(),
     fileColorFormat: majorityColorFormat(
       [...code.tokens.values()].flatMap((t) => Object.values(t.values).flatMap((v) => (v.kind === "color" ? [v.raw] : []))),
       settings.colorMatch !== "perceptual",
@@ -177,7 +180,7 @@ function collectBaseline(
     if (ignore.mode(f.key, pair.mode, f, c)) continue;
     const existing = lockEntryFor(lockToken, pair.mode, pair.figmaMode);
     if (existing && lockMatches(lockCtx, "figma", pair.figma, existing) && lockMatches(lockCtx, "code", pair.code, existing)) continue;
-    const entry = entryFromSides(...comparable(ctx, f, pair));
+    const entry = lockEntryOf(ctx, f, pair);
     if (!entry) continue;
     out.set(f.key, { ...out.get(f.key), [pair.mode]: entry });
   }
@@ -189,7 +192,7 @@ function collectBaseline(
 function handleFinding(ctx: Ctx, finding: Finding, f: NormalizedToken | undefined, c: NormalizedToken | undefined) {
   if (finding.kind === "near-match") {
     const pair = f && c ? pairModes(f, c).find((p) => p.mode === finding.mode) : undefined;
-    const entry = pair?.figma && pair.code ? entryFromSides(...comparable(ctx, f!, pair)) : null;
+    const entry = pair?.figma && pair.code ? lockEntryOf(ctx, f!, pair) : null;
     if (pair && entry) {
       push(ctx, { op: "lock-only" }, finding, "near-match", entry, { token: finding.token, type: c!.type, modes: { [pair.mode]: entry } });
     }
@@ -211,6 +214,7 @@ function handleFinding(ctx: Ctx, finding: Finding, f: NormalizedToken | undefine
     case "conflict":
     case "missing-mode":
     case "format-mismatch":
+    case "alias-mismatch":
     case "broken-alias": {
       const pairs = pairModes(f!, c!).filter((p) =>
         finding.kind === "broken-alias" ? (finding.alias!.side === "figma" ? modeLabel(f!, p.figmaMode) : p.codeMode) === finding.mode : p.mode === finding.mode,
@@ -237,13 +241,17 @@ function decide(ctx: Ctx, finding: Finding): { dir: Dir; via: Via } | null {
   if (finding.suggestedDirection === "figma-to-code" || finding.suggestedDirection === "code-to-figma") {
     return { dir: finding.suggestedDirection, via: "suggested" };
   }
-  const firstSync = finding.kind === "value-mismatch" && finding.mode !== null && finding.changed.figma === null && finding.changed.code === null;
+  const firstSync =
+    (finding.kind === "value-mismatch" || finding.kind === "alias-mismatch") &&
+    finding.mode !== null &&
+    finding.changed.figma === null &&
+    finding.changed.code === null;
   if (firstSync && ctx.prefer) return { dir: ctx.prefer === "figma" ? "figma-to-code" : "code-to-figma", via: "prefer" };
 
   const reason: UnresolvedReason =
     finding.kind === "broken-alias"
       ? "broken-alias"
-      : finding.kind === "value-mismatch"
+      : finding.kind === "value-mismatch" || finding.kind === "alias-mismatch"
         ? finding.mode === null
           ? "type-mismatch"
           : firstSync
@@ -306,8 +314,27 @@ function copyValue(ctx: Ctx, finding: Finding, f: NormalizedToken, c: Normalized
   if (!pair.figma && !f.source.figma!.modeIds[pair.figmaMode]) return unresolve(ctx, finding, "figma-mode-missing");
   if (fSingle && !cSingle && pair.codeMode !== DEFAULT_MODE) return unresolve(ctx, finding, "figma-mode-missing");
 
-  const target = toFigma(ctx, cv, f.type);
+  let target = toFigma(ctx, cv, f.type);
   if (!target.ok) return unresolve(ctx, finding, "type-mismatch", target.reason);
+  // Only alias in Figma if the alias gives code's value in this mode. A single-mode primitive aliased from
+  // Dark gives its one (light) value, even when code overrides that primitive in dark.
+  let note: string | undefined;
+  if (cv.kind === "alias") {
+    const expected = resolvedOr(ctx.code, cv, runtimeCodeMode(f, pair));
+    const figmaTarget = ctx.figma.tokens.get(cv.ref);
+    if (figmaTarget && expected.kind !== "alias") {
+      const got = resolvedOr(ctx.figma, { kind: "alias", ref: cv.ref, raw: "" }, pair.figmaMode);
+      if (!sameValue(ctx.settings, got, expected)) {
+        const literal = toFigma(ctx, expected, f.type);
+        if (literal.ok) {
+          target = literal;
+          note = `aliasing ${figmaTarget.source.figma?.name} would give ${got.raw} in ${pair.mode}, not code's value; wrote the value instead`;
+        }
+      }
+    } else if (!figmaTarget && expected.kind !== "alias") {
+      ctx.aliasChecks.set(`update-figma:${f.key}:${pair.mode}`, { ref: cv.ref, figmaMode: pair.figmaMode, expected });
+    }
+  }
   push(
     ctx,
     {
@@ -316,6 +343,7 @@ function copyValue(ctx: Ctx, finding: Finding, f: NormalizedToken, c: Normalized
       modeId: f.source.figma!.modeIds[pair.figmaMode]!,
       from: figmaValueOf(pair.figma, (k) => ctx.figma.tokens.get(k)?.source.figma?.variableId),
       to: target.value,
+      ...(note ? { note } : {}),
     },
     finding,
     via,
@@ -482,6 +510,11 @@ function deleteCode(ctx: Ctx, finding: Finding, c: NormalizedToken, via: Via) {
   push(ctx, { op: "delete-code", cssVar: c.source.code!.cssVar, ...(prefix ? { modeCssVar: `--${prefix}-${c.key}` } : {}), destructive: true }, finding, via, null, null);
 }
 
+/** Lock entry for an agreeing pair: always the resolved value, plus each side's alias. */
+function lockEntryOf(ctx: Ctx, f: NormalizedToken, pair: Pair): LockModeEntry | null {
+  return entryFromSides(resolvedOr(ctx.figma, pair.figma!, pair.figmaMode), resolvedOr(ctx.code, pair.code!, runtimeCodeMode(f, pair)), pair.figma!, pair.code!);
+}
+
 /** The values compare used for a pair: resolved, unless both are literals or alias the same variable. */
 function comparable(ctx: Ctx, f: NormalizedToken, pair: Pair): [TokenValue, TokenValue] {
   return resolvesByValue(pair.figma!, pair.code!)
@@ -569,6 +602,32 @@ function finalizeAliases(ctx: Ctx) {
       else (values as Record<string, FigmaValue>)[k] = fixed;
     }
   }
+
+  // Aliases to variables created in this plan: check the new variable's value in the aliasing mode.
+  for (const action of ctx.actions) {
+    const check = ctx.aliasChecks.get(action.id);
+    if (!check || action.op !== "update-figma" || action.to.type !== "ALIAS") continue;
+    const create = ctx.actions.find((a): a is Extract<Action, { op: "add-figma" }> => a.op === "add-figma" && a.token === check.ref);
+    const collection = create && ctx.figma.figmaCollections?.find((c) => c.id === create.collectionId);
+    if (!create || !collection) continue;
+    const mode = collection.modes.find((m) => m.name === check.figmaMode) ?? collection.modes[0]!;
+    const planned = create.values[mode.modeId];
+    const got = planned ? figmaValueAsToken(planned, ctx.figma.colorProfile ?? "srgb") : null;
+    if (got && !sameValue(ctx.settings, got, check.expected)) {
+      const literal = toFigma(ctx, check.expected, create.type);
+      if (literal.ok) {
+        action.to = literal.value;
+        action.note = `aliasing the new ${create.name} would give ${got.raw} here, not code's value; wrote the value instead`;
+      }
+    }
+  }
+}
+
+function figmaValueAsToken(v: FigmaValue, profile: "srgb" | "display-p3"): TokenValue | null {
+  if (v.type === "COLOR") return { kind: "color", color: { space: profile, r: v.r, g: v.g, b: v.b, alpha: v.a }, raw: `color(${profile} ${v.r} ${v.g} ${v.b})` };
+  if (v.type === "FLOAT") return { kind: "number", value: v.value, raw: String(v.value) };
+  if (v.type === "STRING") return { kind: "string", value: v.value, raw: v.value };
+  return null;
 }
 
 function buildLockAfter(ctx: Ctx, profile: LockFile["figmaColorProfile"], baseline: Map<TokenKey, Record<ModeName, LockModeEntry>>): LockFile {

@@ -233,3 +233,24 @@ code.
   read-only computed code value, n × `--x` (prefix stripped), when code declares `--x` but not the token.
   It compares normally. Figma → code fixes are unresolved (`computed-in-code`); code → Figma works. A check
   reports the count as info.
+
+## Real-project round 4: scales + semantics
+
+- **Naming through codeSyntax siblings.** A sibling matched by codeSyntax shows how keys map to names
+  (`green/500` ↔ `color-green-500`: drop `color-`), so `color-green-900` becomes `green/900` in the sibling's
+  collection, with its scopes and codeSyntax.
+- **`color-mix()`** is evaluated per mode (premultiplied alpha, normalized percentages, oklch hue methods),
+  with `var()` operands resolved in that mode. Unsupported forms warn and aren't compared. It's exempt from the
+  exact format check, and `plan` won't overwrite it (`computed-in-code`).
+- **`alias-mismatch`.** When both sides alias different variables with the same value, that's a finding
+  instead of silence. The direction comes from the lock's per-side aliases; without them it's a first-sync
+  decision (`--prefer` applies). `plan` re-aliases, creating targets first and resolving pending aliases by
+  name.
+- **Alias validity.** Before proposing a Figma alias, `plan` checks that it resolves to code's value in that
+  mode: directly for existing targets, and after planning for created ones. If not, it writes the value, with
+  a note.
+- **Lock shape.** New entries always store the resolved value (`oklch` + `figmaRgb`, or `value`) plus
+  `figmaAlias` / `codeAlias` for sides that alias. The older `{ alias }` form is still read, as "both sides
+  aliased this".
+- **Info notes.** A `calc()` codeSyntax that is evaluated against code is no longer also listed under
+  "doesn't name a CSS token".

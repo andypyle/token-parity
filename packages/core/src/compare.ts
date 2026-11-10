@@ -29,6 +29,7 @@ import {
   type Rgba,
   type Severity,
   type SideValue,
+  type TokenKey,
   type TokenSet,
   type TokenType,
   type TokenValue,
@@ -49,6 +50,7 @@ const SEVERITY: Record<FindingKind, Severity> = {
   conflict: "error",
   "near-match": "info",
   "format-mismatch": "error",
+  "alias-mismatch": "error",
   "out-of-gamut": "warning",
 };
 
@@ -379,6 +381,7 @@ function comparePair(ctx: Ctx, f: NormalizedToken, c: NormalizedToken, pair: Pai
 
   const classification = classify(result);
   if (!classification) {
+    if (fv.kind === "alias" && cv.kind === "alias" && fv.ref !== cv.ref) return aliasMismatch(ctx, f, c, mode, fv, cv, lockEntry);
     if (ctx.exact) formatCheck(ctx, f, c, mode, cv, cCmp, lockEntry, changed);
     return;
   }
@@ -445,6 +448,39 @@ function compareColorsExact(
     relation: color.sameBytes(fBytes, cBytes) ? "same" : "different",
     figmaOklch,
   };
+}
+
+/**
+ * Same value, different alias targets: e.g. Figma Dark still aliases {dark/page} while code moved to
+ * var(--ds-color-gray-950). Values agree, but the structure has drifted. The lock's per-side aliases say who moved.
+ */
+function aliasMismatch(
+  ctx: Ctx,
+  f: NormalizedToken,
+  c: NormalizedToken,
+  mode: ModeName,
+  fv: Extract<TokenValue, { kind: "alias" }>,
+  cv: Extract<TokenValue, { kind: "alias" }>,
+  lockEntry: LockModeEntry | null,
+) {
+  const lf = lockedAlias(lockEntry, "figma");
+  const lc = lockedAlias(lockEntry, "code");
+  const changed = { figma: lf === undefined ? null : fv.ref !== lf, code: lc === undefined ? null : cv.ref !== lc };
+  const direction: Direction =
+    changed.figma === true && changed.code === false ? "figma-to-code" : changed.code === true && changed.figma === false ? "code-to-figma" : "needs-decision";
+  const moved = direction === "figma-to-code" ? " Figma changed its alias since the last sync." : direction === "code-to-figma" ? " Code changed its alias since the last sync." : "";
+  push(ctx, {
+    kind: "alias-mismatch",
+    token: f.key,
+    mode,
+    type: f.type,
+    figma: describe(f, fv),
+    code: describe(c, cv),
+    lock: lockEntry,
+    changed,
+    suggestedDirection: direction,
+    message: `Same value, but Figma aliases ${fv.raw} and code aliases ${cv.raw}.${moved}`,
+  });
 }
 
 /** Exact matching also needs code to spell the color the way Figma shows it: hex or rgb(), not oklch(). */
@@ -521,6 +557,17 @@ export function runtimeCodeMode(f: NormalizedToken, pair: Pair): ModeName {
   return fMulti && pair.codeMode === DEFAULT_MODE && pair.figmaMode !== f.modes[0] ? pair.mode : pair.codeMode;
 }
 
+/** Whether two resolved values are the same under the current color matching. */
+export function sameValue(settings: CompareSettings, a: TokenValue, b: TokenValue): boolean {
+  if (a.kind === "alias" || b.kind === "alias") return a.kind === "alias" && b.kind === "alias" && a.ref === b.ref;
+  if (a.kind === "color" && b.kind === "color") {
+    if (settings.colorMatch !== "perceptual") return color.sameBytes(color.srgbBytes(a.color), color.srgbBytes(b.color));
+    return color.deltaEOK(asOklch(a.color), asOklch(b.color)) < SAME_COLOR_EPSILON;
+  }
+  if (a.kind === "color" || b.kind === "color") return false;
+  return scalarEqual(scalar(a, settings.remBase), scalar(b, settings.remBase));
+}
+
 /** True unless both values are literals, or both alias the same variable (which is equal by structure). */
 export function resolvesByValue(a: TokenValue, b: TokenValue): boolean {
   if (a.kind !== "alias" && b.kind !== "alias") return false;
@@ -542,8 +589,17 @@ function compareGeneric(ctx: Ctx, fv: TokenValue, cv: TokenValue, lockEntry: Loc
 }
 
 /** Does this side's value still equal what the lock recorded for it? */
+/** The variable a side aliased according to the lock: undefined when that side held a literal (or the lock can't say). */
+export function lockedAlias(entry: LockModeEntry | null, side: "figma" | "code"): TokenKey | undefined {
+  if (!entry) return undefined;
+  if ("alias" in entry) return entry.alias;
+  return side === "figma" ? entry.figmaAlias : entry.codeAlias;
+}
+
 export function lockMatches(ctx: Pick<Ctx, "lockRgbUsable" | "settings">, side: "figma" | "code", value: TokenValue, entry: LockModeEntry): boolean {
-  if (value.kind === "alias") return "alias" in entry && entry.alias === value.ref;
+  if (value.kind === "alias") return lockedAlias(entry, side) === value.ref;
+  // A side that aliased at the last sync and now holds a literal has changed.
+  if (!("alias" in entry) && lockedAlias(entry, side) !== undefined) return false;
   if (value.kind === "color") {
     if (!("oklch" in entry)) return false;
     if (side === "figma" && value.color.space !== "oklch") {

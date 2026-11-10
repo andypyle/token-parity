@@ -80,8 +80,8 @@ describe("push script", () => {
     const mock = mockFigma(readJsonFile(join(dir, "figma.json")));
     // Start from a real export so the change set's exportChecksum matches what the plugin sees.
     writeFileSync(join(dir, "figma.json"), exportText(await exportFrom(mock.figma)));
-    const options = existsSync(join(dir, "plan-options.json")) ? readJsonFile<{ prefer?: "code" | "figma"; allowDeletes?: boolean }>(join(dir, "plan-options.json")) : {};
-    const p = await plan({ settings: PERCEPTUAL,
+    const options = existsSync(join(dir, "plan-options.json")) ? readJsonFile<{ prefer?: "code" | "figma"; allowDeletes?: boolean; settings?: Record<string, unknown> }>(join(dir, "plan-options.json")) : {};
+    const p = await plan({ settings: { ...PERCEPTUAL, ...options.settings },
       figmaPath: join(dir, "figma.json"),
       codePath: join(dir, "theme.css"),
       lockPath: join(dir, "tokens.lock.json"),
@@ -112,7 +112,7 @@ describe("push script", () => {
       expect(jsonChecksum(readFileSync(join(dir, "figma.json"), "utf8"))).toBe(real.checksum);
 
       const touched = new Set(p.actions.map((a) => a.token));
-      const report = await check({ settings: PERCEPTUAL, figmaPath: join(dir, "figma.json"), codePath: join(dir, "theme.css"), lockPath: join(dir, "tokens.lock.json") });
+      const report = await check({ settings: p.settings, figmaPath: join(dir, "figma.json"), codePath: join(dir, "theme.css"), lockPath: join(dir, "tokens.lock.json") });
       expect(report.findings.filter((f) => touched.has(f.token) && f.severity !== "warning")).toEqual([]);
     });
   }

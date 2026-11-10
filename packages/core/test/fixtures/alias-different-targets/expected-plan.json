@@ -3,4 +3,9 @@
     { "id": "add-figma:color-on-fill:*", "op": "add-figma", "via": "suggested" },
     { "id": "add-code:dark-green-100:*", "op": "add-code", "via": "suggested" }
   ],
-  "unresolved": [ { "finding": "missing-mode:color-green-100:dark", "reason": "figma-mode-missing" } ] }
+  "unresolved": [
+    { "finding": "alias-mismatch:color-accent-soft:dark", "reason": "no-lock-difference" },
+    { "finding": "alias-mismatch:color-on-control:dark", "reason": "no-lock-difference" },
+    { "finding": "alias-mismatch:color-on-control:default", "reason": "no-lock-difference" },
+    { "finding": "missing-mode:color-green-100:dark", "reason": "figma-mode-missing" }
+  ] }

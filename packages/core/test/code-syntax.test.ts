@@ -229,7 +229,12 @@ describe("Tailwind prefix, round 2 (real project)", () => {
     expect(report.findings.map((f) => f.token)).not.toContain("color-fg-1");
     expect(report.findings.map((f) => f.token)).not.toContain("color-accent");
     const p = await plan({ settings: PERCEPTUAL, figmaPath: join(dir, "figma.json"), codePath: join(dir, "theme.css"), lockPath: join(dir, "nope.lock.json"), prefer: null, resolutionsPath: null, figmaCollection: null });
-    expect(p.lockAfter.tokens["color-fg-1"]!.modes.dark).toEqual({ oklch: expect.stringMatching(/^oklch\(/), figmaRgb: { r: 0.9137254901960784, g: 0.9294117647058824, b: 0.9411764705882353, a: 1 } });
+    // The resolved value, plus which variable Figma aliased (code held a literal).
+    expect(p.lockAfter.tokens["color-fg-1"]!.modes.dark).toEqual({
+      oklch: expect.stringMatching(/^oklch\(/),
+      figmaRgb: { r: 0.9137254901960784, g: 0.9294117647058824, b: 0.9411764705882353, a: 1 },
+      figmaAlias: "dark-fg-1",
+    });
   });
 
   it("says when code has a mode the Figma collection lacks", async () => {

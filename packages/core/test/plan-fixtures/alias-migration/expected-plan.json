@@ -1,0 +1,6 @@
+{ "exitCode": 0,
+  "actions": [
+    { "id": "add-figma:color-gray-950:*", "op": "add-figma", "via": "suggested" },
+    { "id": "update-figma:color-page:dark", "op": "update-figma", "via": "prefer" }
+  ],
+  "unresolved": [] }
