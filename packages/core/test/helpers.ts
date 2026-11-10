@@ -15,7 +15,10 @@ export const readJsonFile = <T = unknown>(path: string): T => JSON.parse(readFil
 interface ExportJson {
   colorProfile?: string;
   variableCollections: Record<string, unknown>;
-  variables: Record<string, { id: string; name: string; resolvedType: string; variableCollectionId: string; valuesByMode: Record<string, unknown> }>;
+  variables: Record<
+    string,
+    { id: string; name: string; resolvedType: string; variableCollectionId: string; valuesByMode: Record<string, unknown>; scopes?: string[]; codeSyntax?: { WEB?: string } }
+  >;
 }
 
 /**
@@ -44,7 +47,16 @@ export function simulatePush(exportJson: ExportJson, changes: FigmaChangeSet): E
   for (const op of changes.operations) {
     if (op.op === "create-variable") {
       const id = `V:new:${++n}`;
-      out.variables[id] = { id, name: op.name, resolvedType: op.resolvedType, variableCollectionId: op.collectionId, valuesByMode: {} };
+      // Like the real push: scopes and codeSyntax are set on creation.
+      out.variables[id] = {
+        id,
+        name: op.name,
+        resolvedType: op.resolvedType,
+        variableCollectionId: op.collectionId,
+        valuesByMode: {},
+        scopes: [...op.scopes],
+        ...(op.codeSyntax ? { codeSyntax: { WEB: op.codeSyntax } } : {}),
+      };
       idByName.set(op.name, id);
     } else if (op.op === "set-value") {
       const id = "variableId" in op ? op.variableId : idByName.get(op.variableName);
