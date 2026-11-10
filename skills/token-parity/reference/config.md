@@ -38,5 +38,5 @@ are relative to the config file, and command-line flags override it.
 
 ## What to commit
 
-The CSS, `tokens.lock.json`, the Figma export and the resolutions file. CI only needs `npx token-parity
+The CSS, `tokens.lock.json`, the Figma export and the resolutions file. CI only needs `token-parity
 check` (exit 1 on drift).

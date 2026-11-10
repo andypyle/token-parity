@@ -1,6 +1,6 @@
 {
   "name": "token-parity",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Check and sync design tokens between Figma variables and code.",
   "type": "module",
   "license": "MIT",
