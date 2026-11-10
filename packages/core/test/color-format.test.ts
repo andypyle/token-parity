@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { PERCEPTUAL } from "./helpers.js";
 import { describe, expect, it } from "vitest";
 import { plan } from "../src/plan.js";
 import { DEFAULT_SETTINGS, type RgbColor } from "../src/types.js";
@@ -69,13 +70,14 @@ describe("plan with colorFormat", () => {
   const dir = join(import.meta.dirname, "plan-fixtures", "color-format-preserve");
   const run = (colorFormat?: "oklch" | "hex" | "rgb") =>
     plan({
+      settings: { ...PERCEPTUAL, ...(colorFormat ? { colorFormat } : {}) },
       figmaPath: join(dir, "figma.json"),
       codePath: join(dir, "theme.css"),
       lockPath: join(dir, "none.lock.json"),
       prefer: "figma",
       resolutionsPath: null,
       figmaCollection: null,
-      ...(colorFormat ? { settings: { colorFormat } } : {}),
+      ...(colorFormat ? { settings: { ...PERCEPTUAL, colorFormat } } : {}),
     });
   const written = async (colorFormat?: "oklch" | "hex" | "rgb") =>
     Object.fromEntries((await run(colorFormat)).actions.map((a) => [a.token, a.op === "update-code" ? a.to : a.op === "add-code" ? a.values.theme : null]));

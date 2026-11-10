@@ -1,0 +1,12 @@
+/* Exact matching (the default): code must hold the 8-bit value Figma shows, as hex or rgb().
+   color-blue:    #0000ff, exactly Figma's 0000FF          -> in sync
+   color-near:    #0000fe, one step off                    -> drift (no near-match in exact mode)
+   color-red-500: oklch() of exactly Figma's DE3E2D        -> right color, wrong notation: format-mismatch
+   color-gray / color-overlay: rgb() and legacy rgba()     -> in sync */
+@theme {
+  --color-blue: #0000ff;
+  --color-near: #0000fe;
+  --color-red-500: oklch(0.6 0.2 30);
+  --color-gray: rgb(128 128 128);
+  --color-overlay: rgba(5, 7, 9, 0.6);
+}

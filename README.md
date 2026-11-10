@@ -37,13 +37,17 @@ against it:
 | same | changed | copy code → Figma |
 | changed | changed | **conflict**: you decide, it never auto-resolves |
 
-**Colors are compared as colors, not strings.** Code can use `oklch()`, hex or `rgb()`; Figma stores RGB.
-Colors are compared by
-perceptual distance (ΔE in OKLab). A tiny difference from hex rounding counts as a *near-match*, not drift.
-The lock keeps the original OKLCH next to the RGB written to Figma. While Figma's RGB is unchanged, the
-locked OKLCH is used as-is, so a color never slowly drifts from repeated conversion. A color that Figma's
-color profile can't show (out of gamut) is a warning, and the report gives the closest color Figma can
-hold.
+**Colors match 1:1.** If Figma shows `#0000FF`, code must hold exactly that value, as `#0000ff` or
+`rgb(0 0 255)`, so a search for what you see in Figma finds it. One 8-bit step off is drift. The right
+color written another way, such as `oklch()`, is reported as a *format mismatch*, and `plan` rewrites it.
+Values pushed to Figma are written exactly, so Figma then shows the same hex that's in code.
+
+Teams that prefer OKLCH in code can set `colorMatch: "perceptual"`. Colors are then compared by perceptual
+distance (ΔE in OKLab), and a tiny rounding difference counts as a *near-match*, not drift. In that mode
+the lock keeps the original OKLCH next to the RGB written to Figma, so a color never slowly drifts from
+repeated conversion. Exact matching needs an sRGB Figma file (new files are); Display P3 files are compared
+perceptually, with a warning. A color that Figma's color profile can't show (out of gamut) is a warning,
+and the report gives the closest color Figma can hold.
 
 **Check, plan, apply, commit are separate steps.** `check` only reports, and is what CI runs. `plan`
 says exactly what would change. `apply` makes the code edits. `commit` confirms that Figma really holds
@@ -105,7 +109,8 @@ asks three questions and writes the file for you.
 | `modes` | Optional. CSS selectors per mode, e.g. `{ "dark": [".dark"] }` (default: `.dark`, `[data-theme="dark"]`, `@variant dark`) |
 | `figmaCollection` | Optional. Default collection for new single-mode Figma variables |
 | `prefix` | Optional. Tailwind prefix, if `@import "tailwindcss" prefix(…)` isn't in the `code` file |
-| `colorFormat` | Optional. How colors are written into CSS: `"preserve"` (default: keep each value's format, new tokens use the file's usual one), `"oklch"`, `"hex"` or `"rgb"` |
+| `colorMatch` | Optional. `"exact"` (default): colors must be Figma's 8-bit value, as hex or `rgb()`. `"perceptual"`: compare by OKLCH distance, with near-matches for rounding |
+| `colorFormat` | Optional. How colors are written into CSS: `"preserve"` (default: keep each value's format, new tokens use the file's usual one), `"hex"`, `"rgb"`, or `"oklch"` (perceptual only) |
 | `ignore` | Optional. Tokens to leave alone, by CSS or Figma name: `["animate-*", "dark/*", "color-amber-*:dark"]`. `:mode` ignores just that mode |
 | `nearThreshold`, `rgbTolerance`, `precision`, `remBase` | Optional comparison settings (defaults: 0.005 ΔE, 0.5/255, `{l:4,c:4,h:2}`, 16px) |
 
@@ -179,7 +184,8 @@ Use `--format json` for machine-readable output, and `--out <file>` to write a f
 | `missing-in-code` / `missing-in-figma` | error | Only one side has the token (new, or deleted on the other side) |
 | `missing-mode` | error | A mode (e.g. dark) exists on one side only |
 | `broken-alias` | error | An alias points nowhere, loops, or has the wrong type |
-| `near-match` | info | Colors differ only by rounding |
+| `format-mismatch` | error | Same color as Figma, but not written as hex or `rgb()` (exact matching) |
+| `near-match` | info | Colors differ only by rounding (perceptual matching only) |
 | `out-of-gamut` | warning | The code color is outside Figma's color profile |
 
 ### plan, apply, commit

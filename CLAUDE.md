@@ -18,9 +18,13 @@ Checks whether design tokens in Figma match tokens in code, and syncs drift in e
 - Test-first: write fixtures in packages/core/test/fixtures before logic.
 - Pipeline: adapters -> normalize (DTCG-style) -> three-way compare (Figma, code, lock) -> report.
   check / plan / apply are separate commands. CI only runs check.
-- Colors: compare in OKLCH (ΔE), never as strings. Figma stores RGB. The format written into code is the
-  `colorFormat` setting: "preserve" (default: keep each value's format; new tokens use the file's usual
-  one), "oklch", "hex" or "rgb". Hex/rgb can't hold colors outside sRGB; those are written as oklch().
+- Colors need 1:1 parity with Figma by default (`colorMatch: "exact"`): the same 8-bit sRGB value Figma
+  shows, written in code as hex or rgb() so searching for Figma's value finds it. One 8-bit step is drift;
+  the right color in another notation (oklch) is a format-mismatch. Exact needs an sRGB/legacy Figma file
+  (Display P3 falls back to perceptual, with a warning). `colorMatch: "perceptual"` compares in OKLCH (ΔE)
+  with near-matches for rounding. Never compare colors as strings.
+- The format written into code is `colorFormat`: "preserve" (default: keep each value's format; new tokens
+  use the file's usual one), "hex", "rgb", or "oklch" (perceptual only).
 - Lock file stores the original OKLCH and the RGB last written to Figma. If Figma's RGB still
   matches the locked RGB, keep the locked OKLCH; never re-derive it.
 - Out-of-gamut colors are warnings, not drift.

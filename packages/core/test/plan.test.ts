@@ -6,7 +6,7 @@ import { check } from "../src/check.js";
 import { commitPending } from "../src/commit.js";
 import { plan, planExitCode } from "../src/plan.js";
 import type { FigmaChangeSet, LockFile, Plan } from "../src/types.js";
-import { copyFixture, readJsonFile, simulatePush, writeJson } from "./helpers.js";
+import { PERCEPTUAL, copyFixture, readJsonFile, simulatePush, writeJson } from "./helpers.js";
 
 const ROOT = import.meta.dirname;
 const dirs = (sub: string) =>
@@ -36,7 +36,7 @@ function options(dir: string): Options {
 async function planIn(dir: string, figmaFile = "figma.json"): Promise<Plan> {
   const o = options(dir);
   const resolutions = join(dir, "resolutions.json");
-  return plan({
+  return plan({ settings: PERCEPTUAL,
     figmaPath: join(dir, figmaFile),
     codePath: join(dir, "theme.css"),
     lockPath: join(dir, "tokens.lock.json"),
@@ -180,7 +180,7 @@ describe("round trip: plan -> apply -> push -> commit leaves touched tokens in s
         expect(existsSync(join(dir, ".token-parity", "pending.json"))).toBe(false);
       }
 
-      const report = await check({ figmaPath: join(dir, figmaFile), codePath: join(dir, "theme.css"), lockPath: join(dir, "tokens.lock.json") });
+      const report = await check({ settings: PERCEPTUAL, figmaPath: join(dir, figmaFile), codePath: join(dir, "theme.css"), lockPath: join(dir, "tokens.lock.json") });
       // Everything the plan resolved must be in sync; what it left for the user to decide may remain.
       const leftForUser = new Set([...p.unresolved.map((u) => u.finding), ...p.skipped]);
       const leftovers = report.findings.filter((f) => touched.has(f.token) && f.severity !== "warning" && !leftForUser.has(f.id));

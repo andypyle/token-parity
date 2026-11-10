@@ -94,6 +94,7 @@ export async function plan(options: PlanOptions): Promise<Plan> {
     skipped: [],
     fileColorFormat: majorityColorFormat(
       [...code.tokens.values()].flatMap((t) => Object.values(t.values).flatMap((v) => (v.kind === "color" ? [v.raw] : []))),
+      settings.colorMatch !== "perceptual",
     ),
   };
 
@@ -208,6 +209,7 @@ function handleFinding(ctx: Ctx, finding: Finding, f: NormalizedToken | undefine
     // falls through
     case "conflict":
     case "missing-mode":
+    case "format-mismatch":
     case "broken-alias": {
       const pairs = pairModes(f!, c!).filter((p) =>
         finding.kind === "broken-alias" ? (finding.alias!.side === "figma" ? p.figmaMode : p.codeMode) === finding.mode : p.mode === finding.mode,

@@ -154,6 +154,11 @@ export interface CompareSettings {
    * use the file's majority format. Comparison is always in OKLCH whatever the format.
    */
   colorFormat?: "preserve" | "oklch" | "hex" | "rgb";
+  /**
+   * "exact" (default): colors must be the same 8-bit sRGB value Figma shows, written in code as hex or rgb() so a
+   * search for Figma's value finds it. "perceptual": colors compare by OKLCH distance; rounding is a near-match.
+   */
+  colorMatch?: "exact" | "perceptual";
 }
 
 export const DEFAULT_SETTINGS: CompareSettings = {
@@ -163,6 +168,7 @@ export const DEFAULT_SETTINGS: CompareSettings = {
   remBase: 16,
   modeMap: { dark: [".dark", '[data-theme="dark"]', "@variant dark"] },
   colorFormat: "preserve",
+  colorMatch: "exact",
 };
 
 // ---------- Report ----------
@@ -175,7 +181,8 @@ export type FindingKind =
   | "broken-alias"
   | "missing-mode"
   | "conflict"
-  | "out-of-gamut";
+  | "out-of-gamut"
+  | "format-mismatch";
 
 export const FINDING_KINDS: readonly FindingKind[] = [
   "missing-in-code",
@@ -186,6 +193,7 @@ export const FINDING_KINDS: readonly FindingKind[] = [
   "missing-mode",
   "conflict",
   "out-of-gamut",
+  "format-mismatch",
 ];
 
 export type Severity = "error" | "warning" | "info";

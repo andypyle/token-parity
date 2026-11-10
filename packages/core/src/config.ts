@@ -25,6 +25,8 @@ export interface Config {
   ignore?: string[];
   /** How colors are written into CSS: "preserve" (default), "oklch", "hex" or "rgb". */
   colorFormat?: "preserve" | "oklch" | "hex" | "rgb";
+  /** "exact" (default): same 8-bit value as Figma, in hex or rgb(). "perceptual": OKLCH distance with near-matches. */
+  colorMatch?: "exact" | "perceptual";
 }
 
 const PATH_KEYS = ["figma", "code", "lock", "resolutions"] as const;
@@ -64,6 +66,7 @@ export function loadConfig(explicit: string | undefined, cwd = process.cwd()): C
   if (config.colorFormat !== undefined && !["preserve", "oklch", "hex", "rgb"].includes(config.colorFormat)) {
     fail('"colorFormat" must be "preserve", "oklch", "hex" or "rgb"');
   }
+  if (config.colorMatch !== undefined && !["exact", "perceptual"].includes(config.colorMatch)) fail('"colorMatch" must be "exact" or "perceptual"');
   if (config.precision !== undefined) {
     const p = config.precision;
     if (typeof p !== "object" || !["l", "c", "h"].every((k) => Number.isInteger((p as Record<string, unknown>)[k]))) fail('"precision" must be { "l": int, "c": int, "h": int }');
@@ -87,5 +90,6 @@ export function settingsFromConfig(config: Config): Partial<CompareSettings> {
   if (config.prefix !== undefined) s.prefix = config.prefix;
   if (config.ignore !== undefined) s.ignore = config.ignore;
   if (config.colorFormat !== undefined) s.colorFormat = config.colorFormat;
+  if (config.colorMatch !== undefined) s.colorMatch = config.colorMatch;
   return s;
 }

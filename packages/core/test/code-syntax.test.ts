@@ -9,7 +9,7 @@ import { codeSyntaxCandidates, codeSyntaxVarName, detectCodeSyntaxStyle, formatC
 import { exportScript } from "../src/figma-script.js";
 import { plan } from "../src/plan.js";
 import { DEFAULT_SETTINGS } from "../src/types.js";
-import { copyFixture, readJsonFile, writeJson } from "./helpers.js";
+import { PERCEPTUAL, copyFixture, readJsonFile, writeJson } from "./helpers.js";
 import { mockFigma, runInFigma } from "./mock-figma.js";
 
 const CODE = new Set(["color-primary", "color-primary-500", "spacing-4", "radius-md", "text-sm", "font-sans", "font-weight-bold", "color-brand", "color-slate-50"]);
@@ -96,7 +96,7 @@ describe("Tailwind prefix", () => {
 });
 
 const FIXTURES = join(import.meta.dirname, "fixtures");
-const runCheck = (dir: string, lock: string | null = null) => check({ figmaPath: join(dir, "figma.json"), codePath: join(dir, "theme.css"), lockPath: lock });
+const runCheck = (dir: string, lock: string | null = null) => check({ settings: PERCEPTUAL, figmaPath: join(dir, "figma.json"), codePath: join(dir, "theme.css"), lockPath: lock });
 
 describe("matching by codeSyntax (Tailwind prefix fixture)", () => {
   it("warns only about var names that aren't in code; expressions get one info note", async () => {
@@ -177,7 +177,7 @@ describe("plan with a Tailwind prefix", () => {
       variables,
     });
     return (prefer: "code" | "figma" | null = null) =>
-      plan({ figmaPath: join(dir, "figma.json"), codePath: join(dir, "theme.css"), lockPath: join(dir, "tokens.lock.json"), prefer, resolutionsPath: null, figmaCollection: null });
+      plan({ settings: PERCEPTUAL, figmaPath: join(dir, "figma.json"), codePath: join(dir, "theme.css"), lockPath: join(dir, "tokens.lock.json"), prefer, resolutionsPath: null, figmaCollection: null });
   }
   const WHITE = { r: 0.980256, g: 0.980256, b: 0.980256, a: 1 };
   const DARK = { r: 0.093799, g: 0.093792, b: 0.105831, a: 1 };
@@ -227,7 +227,7 @@ describe("Tailwind prefix, round 2 (real project)", () => {
     const report = await runCheck(dir);
     expect(report.findings.map((f) => f.token)).not.toContain("color-fg-1");
     expect(report.findings.map((f) => f.token)).not.toContain("color-accent");
-    const p = await plan({ figmaPath: join(dir, "figma.json"), codePath: join(dir, "theme.css"), lockPath: join(dir, "nope.lock.json"), prefer: null, resolutionsPath: null, figmaCollection: null });
+    const p = await plan({ settings: PERCEPTUAL, figmaPath: join(dir, "figma.json"), codePath: join(dir, "theme.css"), lockPath: join(dir, "nope.lock.json"), prefer: null, resolutionsPath: null, figmaCollection: null });
     expect(p.lockAfter.tokens["color-fg-1"]!.modes.dark).toEqual({ oklch: expect.stringMatching(/^oklch\(/), figmaRgb: { r: 0.9137254901960784, g: 0.9294117647058824, b: 0.9411764705882353, a: 1 } });
   });
 
@@ -239,7 +239,7 @@ describe("Tailwind prefix, round 2 (real project)", () => {
   });
 
   it("writes a Figma alias whose target isn't in code as its resolved value", async () => {
-    const p = await plan({ figmaPath: join(dir, "figma.json"), codePath: join(dir, "theme.css"), lockPath: join(dir, "nope.lock.json"), prefer: null, resolutionsPath: null, figmaCollection: null });
+    const p = await plan({ settings: PERCEPTUAL, figmaPath: join(dir, "figma.json"), codePath: join(dir, "theme.css"), lockPath: join(dir, "nope.lock.json"), prefer: null, resolutionsPath: null, figmaCollection: null });
     expect(p.actions.find((a) => a.op === "add-code")).toMatchObject({ token: "dark-fg-1", values: { theme: expect.stringMatching(/^oklch\(/) } });
   });
 });

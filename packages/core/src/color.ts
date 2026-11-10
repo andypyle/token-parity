@@ -80,6 +80,21 @@ export function rgbaToOklch(rgba: Rgba, profile: ColorProfile): OklchColor {
   return fromCulori(toOklch({ mode: culoriMode(profile), r: rgba.r, g: rgba.g, b: rgba.b, alpha: rgba.a }));
 }
 
+/**
+ * A color as 8-bit sRGB, the way Figma shows it (#0000FF, opacity as a byte): [r, g, b, a], each 0-255.
+ * Null when the color is outside sRGB, where no byte value represents it.
+ */
+export function srgbBytes(c: OklchColor | RgbColor): [number, number, number, number] | null {
+  const s = c.space === "srgb" ? c : toRgb(c.space === "oklch" ? toCulori(c) : rgbToCulori(c));
+  const channels = [s.r, s.g, s.b];
+  if (!channels.every((v) => v >= -GAMUT_EPSILON && v <= 1 + GAMUT_EPSILON)) return null;
+  const alpha = c.alpha ?? 1;
+  const byte = (v: number) => Math.round(Math.min(1, Math.max(0, v)) * 255);
+  return [byte(channels[0]!), byte(channels[1]!), byte(channels[2]!), byte(alpha)];
+}
+
+export const sameBytes = (a: readonly number[] | null, b: readonly number[] | null) => !!a && !!b && a.every((v, i) => v === b[i]);
+
 /** Convert Display P3 channels to sRGB; null when the color is outside sRGB. */
 export function toSrgb(c: RgbColor): RgbColor | null {
   const s = toRgb(rgbToCulori(c));

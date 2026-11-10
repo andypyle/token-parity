@@ -10,7 +10,7 @@ import type { PushResult } from "../src/predict.js";
 import { exportScript, jsonChecksum, pushScript } from "../src/figma-script.js";
 import { plan } from "../src/plan.js";
 import type { FigmaChangeSet } from "../src/types.js";
-import { copyFixture, readJsonFile } from "./helpers.js";
+import { PERCEPTUAL, copyFixture, readJsonFile } from "./helpers.js";
 import { mockFigma, runInFigma } from "./mock-figma.js";
 
 const ROOT = import.meta.dirname;
@@ -81,7 +81,7 @@ describe("push script", () => {
     // Start from a real export so the change set's exportChecksum matches what the plugin sees.
     writeFileSync(join(dir, "figma.json"), exportText(await exportFrom(mock.figma)));
     const options = existsSync(join(dir, "plan-options.json")) ? readJsonFile<{ prefer?: "code" | "figma"; allowDeletes?: boolean }>(join(dir, "plan-options.json")) : {};
-    const p = await plan({
+    const p = await plan({ settings: PERCEPTUAL,
       figmaPath: join(dir, "figma.json"),
       codePath: join(dir, "theme.css"),
       lockPath: join(dir, "tokens.lock.json"),
@@ -112,7 +112,7 @@ describe("push script", () => {
       expect(jsonChecksum(readFileSync(join(dir, "figma.json"), "utf8"))).toBe(real.checksum);
 
       const touched = new Set(p.actions.map((a) => a.token));
-      const report = await check({ figmaPath: join(dir, "figma.json"), codePath: join(dir, "theme.css"), lockPath: join(dir, "tokens.lock.json") });
+      const report = await check({ settings: PERCEPTUAL, figmaPath: join(dir, "figma.json"), codePath: join(dir, "theme.css"), lockPath: join(dir, "tokens.lock.json") });
       expect(report.findings.filter((f) => touched.has(f.token) && f.severity !== "warning")).toEqual([]);
     });
   }
@@ -186,7 +186,7 @@ describe("token weight", () => {
     const dir = copyFixture(join(ROOT, "plan-fixtures", "prefer-code"));
     const mock = mockFigma(readJsonFile(join(dir, "figma.json")));
     writeFileSync(join(dir, "figma.json"), exportText(await exportFrom(mock.figma)));
-    const p = await plan({ figmaPath: join(dir, "figma.json"), codePath: join(dir, "theme.css"), lockPath: join(dir, "tokens.lock.json"), prefer: "code", resolutionsPath: null, figmaCollection: null });
+    const p = await plan({ settings: PERCEPTUAL, figmaPath: join(dir, "figma.json"), codePath: join(dir, "theme.css"), lockPath: join(dir, "tokens.lock.json"), prefer: "code", resolutionsPath: null, figmaCollection: null });
     const applied = await applyPlan(p, { allowDeletes: false });
     const pushed = (await runInFigma(pushScript(applied.figmaChanges), mock.figma)) as PushResult;
 

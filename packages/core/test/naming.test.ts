@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { readFigmaExport } from "../src/adapters/figma.js";
 import { check } from "../src/check.js";
 import { formatLike, inferFigmaName } from "../src/naming.js";
-import { copyFixture, readJsonFile, writeJson } from "./helpers.js";
+import { PERCEPTUAL, copyFixture, readJsonFile, writeJson } from "./helpers.js";
 
 describe("formatLike", () => {
   it.each([
@@ -55,7 +55,7 @@ describe("matching by Figma variable id", () => {
     figma.variables["V:3"]!.name = "Surface/Background";
     writeJson(join(dir, "figma.json"), figma);
 
-    const report = await check({ figmaPath: join(dir, "figma.json"), codePath: join(dir, "theme.css"), lockPath: join(dir, "tokens.lock.json") });
+    const report = await check({ settings: PERCEPTUAL, figmaPath: join(dir, "figma.json"), codePath: join(dir, "theme.css"), lockPath: join(dir, "tokens.lock.json") });
     expect(report.findings).toEqual([]);
     expect(report.diagnostics).toContainEqual(expect.objectContaining({ level: "info", token: "color-bg", message: expect.stringContaining("renamed") }));
   });
@@ -76,7 +76,7 @@ describe("scopes for new variables", () => {
     });
     const { writeFileSync } = await import("node:fs");
     writeFileSync(join(dir, "theme.css"), "@theme { --spacing-1: 4px; --spacing-2: 8px; --radius-sm: 4px; --radius-lg: 12px; }\n");
-    const p = await plan({ figmaPath: join(dir, "figma.json"), codePath: join(dir, "theme.css"), lockPath: join(dir, "tokens.lock.json"), prefer: null, resolutionsPath: null, figmaCollection: null });
+    const p = await plan({ settings: PERCEPTUAL, figmaPath: join(dir, "figma.json"), codePath: join(dir, "theme.css"), lockPath: join(dir, "tokens.lock.json"), prefer: null, resolutionsPath: null, figmaCollection: null });
     const adds = Object.fromEntries(p.actions.flatMap((a) => (a.op === "add-figma" ? [[a.token, [a.scopes, a.scopesFrom]]] : [])));
     expect(adds["spacing-2"]).toEqual([["GAP"], "sibling"]);
     expect(adds["radius-lg"]).toEqual([["CORNER_RADIUS"], "namespace"]);

@@ -60,3 +60,6 @@ export function simulatePush(exportJson: ExportJson, changes: FigmaChangeSet): E
 export function writeJson(path: string, value: unknown) {
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
 }
+
+/** The fixtures in test/fixtures and test/plan-fixtures describe perceptual color matching. */
+export const PERCEPTUAL = { colorMatch: "perceptual" } as const;

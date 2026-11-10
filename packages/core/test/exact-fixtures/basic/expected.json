@@ -1,0 +1,7 @@
+{
+  "exitCode": 1,
+  "findings": [
+    { "id": "value-mismatch:color-near:default", "kind": "value-mismatch", "token": "color-near", "mode": "default", "severity": "error", "suggestedDirection": "needs-decision" },
+    { "id": "format-mismatch:color-red-500:default", "kind": "format-mismatch", "token": "color-red-500", "mode": "default", "severity": "error", "suggestedDirection": "figma-to-code" }
+  ]
+}

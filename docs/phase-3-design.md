@@ -202,3 +202,22 @@ Hex and `rgb()` hold only sRGB. A Display P3 color inside sRGB is converted. One
 as `oklch()`, with a note on the plan action. The lock keeps OKLCH whatever is written: the text itself
 for `oklch()`, or a lossless OKLCH rendering of hex/rgb. So 8-bit rounding never shows up as drift. The
 "not oklch()" warning only appears under `"oklch"`.
+
+## Exact color matching (default)
+
+The requirement: colors need 1:1 parity with Figma. If Figma shows `#0000FF`, that is the value to find in
+code.
+
+- **`colorMatch: "exact"` (default).** Both sides are reduced to 8-bit sRGB bytes (r, g, b, alpha), the
+  way Figma shows them, and must be identical. There is no tolerance and no near-match. Lock change
+  detection uses the same bytes.
+- **Notation.** A matching color written in a form you can't search for (`oklch()`, `hsl()`, named) is a
+  `format-mismatch` error, suggested Figma to code. `plan` rewrites it as hex or `rgb()`: "preserve" keeps
+  hex vs rgb() per value, and replaces oklch with the file's majority of hex/rgb, defaulting to hex.
+- **Writing to Figma.** Code's bytes are written as k/255, so Figma displays exactly the code's hex.
+- **Display P3 files** fall back to perceptual matching with a warning: Figma's hex there is P3, which CSS
+  hex can't express.
+- **`colorFormat: "oklch"`** with exact matching is refused as a configuration error.
+- **`colorMatch: "perceptual"`** is the earlier behavior (OKLCH ΔE, near-matches, `oklch()` allowed). The
+  original fixtures in `test/fixtures` and `test/plan-fixtures` describe this mode and run with it
+  explicitly. Exact-mode fixtures live in `test/exact-fixtures`.

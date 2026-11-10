@@ -9,6 +9,7 @@
 //   gamut-mapped code color so clamping never counts as drift.
 import { resolveAlias, type Literal } from "./alias.js";
 import { compileIgnore, type IgnoreMatcher } from "./ignore.js";
+import { cssColorFormat } from "./values.js";
 import * as color from "./color.js";
 import {
   DEFAULT_MODE,
@@ -46,6 +47,7 @@ const SEVERITY: Record<FindingKind, Severity> = {
   "missing-mode": "error",
   conflict: "error",
   "near-match": "info",
+  "format-mismatch": "error",
   "out-of-gamut": "warning",
 };
 
@@ -72,6 +74,8 @@ interface Ctx extends CompareInput {
   findings: Finding[];
   ignore: IgnoreMatcher;
   ignored: { tokens: number; modes: number };
+  /** colorMatch "exact" in effect (needs an sRGB Figma file). */
+  exact: boolean;
 }
 
 export function compare(input: CompareInput): CompareResult {
@@ -85,7 +89,24 @@ export function compare(input: CompareInput): CompareResult {
       message: `Lock RGB values were recorded in ${input.lock!.figmaColorProfile} but the Figma file is ${profile}; every Figma color is treated as changed.`,
     });
   }
-  const ctx: Ctx = { ...input, profile, lockRgbUsable, findings: [], ignore: compileIgnore(input.settings.ignore), ignored: { tokens: 0, modes: 0 } };
+  let exact = input.settings.colorMatch !== "perceptual";
+  if (exact && profile === "display-p3") {
+    exact = false;
+    diagnostics.push({
+      level: "warning",
+      origin: "figma",
+      message: "Exact color matching compares 8-bit sRGB values, but this Figma file uses Display P3; colors are compared perceptually instead.",
+    });
+  }
+  const ctx: Ctx = {
+    ...input,
+    profile,
+    lockRgbUsable,
+    findings: [],
+    ignore: compileIgnore(input.settings.ignore),
+    ignored: { tokens: 0, modes: 0 },
+    exact,
+  };
 
   const keys = [...new Set([...input.figma.tokens.keys(), ...input.code.tokens.keys()])].sort();
   for (const key of keys) {
@@ -341,7 +362,10 @@ function comparePair(ctx: Ctx, f: NormalizedToken, c: NormalizedToken, pair: Pai
   gamutCheck(ctx, c, mode, cv, lockEntry, changed);
 
   const classification = classify(result);
-  if (!classification) return;
+  if (!classification) {
+    if (ctx.exact) formatCheck(ctx, f, c, mode, cv, cCmp, lockEntry, changed);
+    return;
+  }
 
   const figma = describe(f, fv, result.figmaOklch);
   const code = describe(c, cv);
@@ -383,12 +407,67 @@ function classify(r: Comparison): { kind: "value-mismatch" | "near-match" | "con
   return { kind: "value-mismatch", direction: r.figmaChanged ? "figma-to-code" : "code-to-figma" };
 }
 
+/**
+ * Exact matching: a color equals Figma's only when its 8-bit sRGB value (what Figma shows, e.g. #0000FF) is
+ * identical. No tolerance, no near-match. Lock changes are judged on the same bytes.
+ */
+function compareColorsExact(
+  ctx: Ctx,
+  fv: Extract<TokenValue, { kind: "color" }>,
+  cv: Extract<TokenValue, { kind: "color" }>,
+  lockEntry: LockModeEntry | null,
+): Comparison {
+  const fBytes = color.srgbBytes(fv.color);
+  const cBytes = color.srgbBytes(cv.color);
+  const locked = lockEntry && "oklch" in lockEntry ? lockEntry : null;
+  const lockFigma = locked ? color.srgbBytes({ space: "srgb", r: locked.figmaRgb.r, g: locked.figmaRgb.g, b: locked.figmaRgb.b, alpha: locked.figmaRgb.a }) : null;
+  const lockCode = locked ? color.srgbBytes(color.parseOklch(locked.oklch)!) : null;
+  const figmaOklch = { color: fv.color.space === "oklch" ? fv.color : color.rgbToOklch(fv.color, ctx.settings.precision), source: "converted" as const };
+  return {
+    figmaChanged: lockEntry ? !(locked && color.sameBytes(fBytes, lockFigma)) : null,
+    codeChanged: lockEntry ? !(locked && color.sameBytes(cBytes, lockCode)) : null,
+    relation: color.sameBytes(fBytes, cBytes) ? "same" : "different",
+    figmaOklch,
+  };
+}
+
+/** Exact matching also needs code to spell the color the way Figma shows it: hex or rgb(), not oklch(). */
+function formatCheck(
+  ctx: Ctx,
+  f: NormalizedToken,
+  c: NormalizedToken,
+  mode: ModeName,
+  cv: TokenValue,
+  cCmp: TokenValue,
+  lockEntry: LockModeEntry | null,
+  changed: { figma: boolean | null; code: boolean | null },
+) {
+  if (cv.kind !== "color" || cCmp.kind !== "color") return;
+  const format = cssColorFormat(cv.raw);
+  if (format === "hex" || format === "rgb") return;
+  const bytes = color.srgbBytes(cv.color);
+  const hex = bytes ? `#${bytes.slice(0, 3).map((b) => b.toString(16).padStart(2, "0")).join("")}${bytes[3] !== 255 ? bytes[3]!.toString(16).padStart(2, "0") : ""}` : null;
+  push(ctx, {
+    kind: "format-mismatch",
+    token: f.key,
+    mode,
+    type: f.type,
+    figma: null,
+    code: describe(c, cv),
+    lock: lockEntry,
+    changed,
+    suggestedDirection: "figma-to-code",
+    message: `Same color as Figma, but code writes it as ${cv.raw}; exact matching needs hex or rgb()${hex ? ` (${hex})` : ""} so it matches what Figma shows.`,
+  });
+}
+
 function compareColors(
   ctx: Ctx,
   fv: Extract<TokenValue, { kind: "color" }>,
   cv: Extract<TokenValue, { kind: "color" }>,
   lockEntry: LockModeEntry | null,
 ): Comparison {
+  if (ctx.exact) return compareColorsExact(ctx, fv, cv, lockEntry);
   const codeColor = asOklch(cv.color);
   const locked = lockEntry && "oklch" in lockEntry ? lockEntry : null;
 

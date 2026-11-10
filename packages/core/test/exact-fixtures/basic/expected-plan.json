@@ -1,0 +1,6 @@
+{ "exitCode": 0,
+  "actions": [
+    { "id": "update-code:color-near:default", "op": "update-code", "via": "prefer" },
+    { "id": "update-code:color-red-500:default", "op": "update-code", "via": "suggested" }
+  ],
+  "unresolved": [] }

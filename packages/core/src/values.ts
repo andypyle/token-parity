@@ -42,15 +42,18 @@ export function cssColorFormat(raw: string): Written | null {
   return null;
 }
 
-/** The format a file mostly uses for its colors. Ties go to oklch, then hex, then rgb. */
-export function majorityColorFormat(raws: Iterable<string>): Written {
+/**
+ * The format a file mostly uses for its colors. Ties go to oklch, then hex, then rgb. With `exact`, only hex
+ * and rgb() count (oklch can't show Figma's value), and the default is hex.
+ */
+export function majorityColorFormat(raws: Iterable<string>, exact = false): Written {
   const counts: Record<Written, number> = { oklch: 0, hex: 0, rgb: 0 };
   for (const raw of raws) {
     const f = cssColorFormat(raw);
-    if (f) counts[f]++;
+    if (f && !(exact && f === "oklch")) counts[f]++;
   }
-  const order: Written[] = ["oklch", "hex", "rgb"];
-  return order.reduce((best, f) => (counts[f] > counts[best] ? f : best), "oklch");
+  const order: Written[] = exact ? ["hex", "rgb"] : ["oklch", "hex", "rgb"];
+  return order.reduce((best, f) => (counts[f] > counts[best] ? f : best), order[0]!);
 }
 
 const byte = (v: number) => Math.round(Math.min(1, Math.max(0, v)) * 255);
@@ -105,7 +108,10 @@ export function codeTextFromFigma(
       const rgb = figmaRgbOf(fv);
       if (!rgb || fv.color.space === "oklch") return { ok: false, reason: "not an RGB color" };
       const wanted = settings.colorFormat ?? "preserve";
-      const format: Written = wanted === "preserve" ? ((like?.kind === "color" ? cssColorFormat(like.raw) : null) ?? fileFormat) : wanted;
+      const exact = settings.colorMatch !== "perceptual";
+      const likeFormat = like?.kind === "color" ? cssColorFormat(like.raw) : null;
+      const kept = likeFormat && !(exact && likeFormat === "oklch") ? likeFormat : null;
+      const format: Written = wanted === "preserve" ? (kept ?? fileFormat) : wanted;
       const written = writeCssColor(fv.color, format, settings, like?.kind === "color" ? like.raw : undefined);
       // The lock keeps OKLCH: the written text when it is oklch(), otherwise a lossless rendering of it.
       const parsed = color.parseCssColor(written.text)!;
@@ -138,6 +144,12 @@ export function figmaValueFromCode(
   if (cv.kind === "color") {
     if (figmaType !== "color") return { ok: false, reason: `Figma variable is ${figmaType}` };
     const c = cv.color.space === "oklch" ? cv.color : color.rgbaToOklch({ r: cv.color.r, g: cv.color.g, b: cv.color.b, a: cv.color.alpha }, cv.color.space);
+    // Exact matching: write the code's 8-bit value as k/255, so Figma shows exactly the hex that's in code.
+    const bytes = settings.colorMatch !== "perceptual" && profile === "srgb" ? color.srgbBytes(cv.color) : null;
+    if (bytes) {
+      const exactRgb = { r: bytes[0] / 255, g: bytes[1] / 255, b: bytes[2] / 255, a: bytes[3] / 255 };
+      return { ok: true, value: { type: "COLOR", ...exactRgb }, lock: { oklch: lockOklchText(cv), figmaRgb: exactRgb } };
+    }
     const rgb = color.toGamutRgb(c, profile);
     return { ok: true, value: { type: "COLOR", ...rgb }, lock: { oklch: lockOklchText(cv), figmaRgb: rgb } };
   }

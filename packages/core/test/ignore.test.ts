@@ -6,7 +6,7 @@ import { check } from "../src/check.js";
 import { compileIgnore } from "../src/ignore.js";
 import { plan } from "../src/plan.js";
 import type { NormalizedToken } from "../src/types.js";
-import { copyFixture, writeJson } from "./helpers.js";
+import { PERCEPTUAL, copyFixture, writeJson } from "./helpers.js";
 import { runCli } from "../src/run-cli.js";
 
 const figmaToken = (name: string) => ({ source: { origin: "figma", figma: { name } } }) as unknown as NormalizedToken;
@@ -39,7 +39,7 @@ const PREFIXED = join(import.meta.dirname, "fixtures", "tailwind-prefix-dark");
 
 describe("ignore in check and plan", () => {
   const run = (dir: string, ignore: string[], lock: string | null = null) =>
-    check({ figmaPath: join(dir, "figma.json"), codePath: join(dir, "theme.css"), lockPath: lock, settings: { ignore } });
+    check({ figmaPath: join(dir, "figma.json"), codePath: join(dir, "theme.css"), lockPath: lock, settings: { ...PERCEPTUAL, ignore } });
 
   it("drops Figma-only groups and intentional code-only dark overrides from the report", async () => {
     const report = await run(PREFIXED, ["dark/*", "color-amber-*:dark"]);
@@ -74,7 +74,7 @@ describe("ignore in check and plan", () => {
       prefer: null,
       resolutionsPath: null,
       figmaCollection: null,
-      settings: { ignore: ["dark/*", "color-amber-*:dark"] },
+      settings: { ...PERCEPTUAL, ignore: ["dark/*", "color-amber-*:dark"] },
     });
     expect(p.actions.map((a) => a.id)).toEqual(["lock-only:color-amber-100:default"]);
     expect(p.unresolved).toEqual([]);
@@ -84,10 +84,10 @@ describe("ignore in check and plan", () => {
 
   it("comes from the config file or --ignore", async () => {
     const dir = copyFixture(PREFIXED);
-    writeJson(join(dir, "token-parity.config.json"), { figma: "figma.json", code: "theme.css", ignore: ["dark/*", "color-amber-*:dark"] });
+    writeJson(join(dir, "token-parity.config.json"), { figma: "figma.json", code: "theme.css", colorMatch: "perceptual", ignore: ["dark/*", "color-amber-*:dark"] });
     const io = { stdout: () => {}, stderr: () => {} };
     expect(await runCli(["check", "--config", join(dir, "token-parity.config.json")], io)).toBe(0);
-    writeJson(join(dir, "token-parity.config.json"), { figma: "figma.json", code: "theme.css" });
+    writeJson(join(dir, "token-parity.config.json"), { figma: "figma.json", code: "theme.css", colorMatch: "perceptual" });
     expect(await runCli(["check", "--config", join(dir, "token-parity.config.json")], io)).toBe(1);
     expect(await runCli(["check", "--config", join(dir, "token-parity.config.json"), "--ignore", "dark/*", "--ignore", "color-amber-*:dark"], io)).toBe(0);
     writeJson(join(dir, "token-parity.config.json"), { figma: "figma.json", code: "theme.css", ignore: "dark/*" });

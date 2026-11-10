@@ -6,12 +6,13 @@ import { check } from "../src/check.js";
 import * as color from "../src/color.js";
 import { compare } from "../src/compare.js";
 import { DEFAULT_SETTINGS, type LockFile } from "../src/types.js";
+import { PERCEPTUAL } from "./helpers.js";
 
 vi.mock("../src/color.js", { spy: true });
 
 const FIXTURES = join(import.meta.dirname, "fixtures");
 const fixture = (name: string, lock = true) =>
-  check({
+  check({ settings: PERCEPTUAL,
     figmaPath: join(FIXTURES, name, "figma.json"),
     codePath: join(FIXTURES, name, "theme.css"),
     lockPath: lock ? join(FIXTURES, name, "tokens.lock.json") : null,
@@ -87,7 +88,7 @@ const BLUE_Q = { r: 0.223529, g: 0.505882, b: 0.964706, a: 1 };
 function run(variables: Record<string, unknown>, css: string, lock: LockFile | null = null, collections: object = { ...PRIM, ...SEM }, profile = "srgb") {
   const figma = readFigmaExport({ colorProfile: profile, variableCollections: collections, variables }, "figma.json");
   const code = readTailwindCss(css, "theme.css", DEFAULT_SETTINGS.modeMap);
-  return compare({ figma, code, lock, settings: DEFAULT_SETTINGS });
+  return compare({ figma, code, lock, settings: { ...DEFAULT_SETTINGS, ...PERCEPTUAL } });
 }
 const v = (id: string, name: string, collection: string, valuesByMode: object, resolvedType = "COLOR") => ({
   [id]: { id, name, resolvedType, variableCollectionId: collection, valuesByMode },
@@ -136,7 +137,7 @@ describe("modes", () => {
     const css = "@theme { --color-bg: oklch(0.62 0.19 259.8); } .dark { --color-bg: oklch(0.62 0.19 259.8); } @media (prefers-contrast: more) { :root { --color-bg: oklch(0 0 0); } }";
     const figma = readFigmaExport({ colorProfile: "srgb", variableCollections: SEM, variables: vars }, "f.json");
     const code = readTailwindCss(css, "t.css", { ...DEFAULT_SETTINGS.modeMap, contrast: ["@media (prefers-contrast: more)"] });
-    const r = compare({ figma, code, lock: null, settings: DEFAULT_SETTINGS });
+    const r = compare({ figma, code, lock: null, settings: { ...DEFAULT_SETTINGS, ...PERCEPTUAL } });
     expect(r.findings.map((f) => `${f.kind}:${f.mode}:${f.suggestedDirection}`)).toEqual(["missing-mode:contrast:code-to-figma"]);
   });
 

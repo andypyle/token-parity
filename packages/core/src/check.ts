@@ -31,6 +31,9 @@ export interface LoadedInputs {
 /** Read and normalize all inputs. Shared by check, plan and commit so they always match tokens the same way. */
 export async function loadInputs(options: CheckOptions): Promise<LoadedInputs> {
   const settings: CompareSettings = { ...DEFAULT_SETTINGS, ...options.settings };
+  if (settings.colorMatch !== "perceptual" && settings.colorFormat === "oklch") {
+    throw new InputError('colorFormat "oklch" can\'t give exact matches with Figma; use "hex", "rgb" or "preserve", or set colorMatch to "perceptual".');
+  }
   const diagnostics: Diagnostic[] = [];
 
   // A lock path that does not exist yet is the normal first run: compare without a baseline.
